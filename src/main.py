@@ -2,6 +2,7 @@ import os
 from fastapi import FastAPI
 from .service import stores
 import uvicorn
+import logsys
 
 # Configuration context
 class Config:
@@ -47,9 +48,12 @@ class Config:
             "KEYCLOAK_CLIENT_SECRET", "secret"
         )
 
-
+# Configure application settings
 config = Config()
 config.setup()
+
+# Configure logging
+logsys.configure()
 
 
 # create FastAPI app
@@ -59,8 +63,6 @@ api = FastAPI(
     root_path=config.settings["CONTEXT_PATH"] + "/api",
 )
 
-# initialize store once
-stores.bootstrap()
 
 # import routers
 from .routers import recipes, guides, policies, lineage

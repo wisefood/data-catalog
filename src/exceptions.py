@@ -3,14 +3,12 @@ from __future__ import annotations
 import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
-
-from fastapi import HTTPException, WebSocketException, Request
+from fastapi import HTTPException, Request
 from starlette.responses import JSONResponse
 
 # -------------------------------------------------
 # Core: rich APIException (RFC-7807 compatible)
 # -------------------------------------------------
-
 class APIException(HTTPException):
     """
     Rich HTTP error with structured fields and helpers

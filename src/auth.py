@@ -12,6 +12,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt
 
 from exceptions import APIException, AuthenticationError, AuthorizationError
+
 # Prefer extracting settings to avoid circular imports:
 from main import config as settings
 import kutils
@@ -21,25 +22,30 @@ security_scheme_name = "BearerAuth"
 bearer_scheme = HTTPBearer(
     auto_error=False,
     scheme_name=security_scheme_name,
-    description="An OAuth2 token issued by the STELAR IDP."
+    description="An OAuth2 token issued by the STELAR IDP.",
 )
 security_doc = security_scheme_name
 
 # ---------------- HTTP client (pooled) ----------------
 _http: httpx.AsyncClient | None = None
+
+
 def http() -> httpx.AsyncClient:
     global _http
     if _http is None:
         _http = httpx.AsyncClient(timeout=5.0)
     return _http
 
+
 # ---------------- JWKS cache with retry on unknown kid ----------------
 _JWKS: Dict[str, Any] | None = None
 _JWKS_TS: float = 0.0
 _JWKS_TTL = 600  # seconds
 
+
 def _jwks_url() -> str:
     return f"{settings.KEYCLOAK_URL}/realms/{settings.REALM_NAME}/protocol/openid-connect/certs"
+
 
 async def _get_jwks(force: bool = False) -> Dict[str, Any]:
     global _JWKS, _JWKS_TS
@@ -52,6 +58,7 @@ async def _get_jwks(force: bool = False) -> Dict[str, Any]:
     _JWKS_TS = now
     return _JWKS
 
+
 # ---------------- Token extraction ----------------
 def _extract_bearer_from_header(authorization: Optional[str]) -> Optional[str]:
     if not authorization:
@@ -60,6 +67,7 @@ def _extract_bearer_from_header(authorization: Optional[str]) -> Optional[str]:
     if len(parts) != 2 or parts[0].lower() != "bearer":
         raise AuthenticationError(detail="Authorization header is missing or malformed")
     return parts[1].strip()
+
 
 def _get_token_from_request(
     request: Request,
@@ -78,18 +86,24 @@ def _get_token_from_request(
         raise AuthenticationError(detail="Bearer token is missing")
     return urllib.parse.unquote(token).strip()
 
+
 def get_current_token(
     request: Request,
     authorization: Optional[str] = Header(None, alias="Authorization"),
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(bearer_scheme),
     access_token_cookie: Optional[str] = Cookie(None, alias="access_token"),
 ) -> str:
-    return _get_token_from_request(request, authorization, access_token_cookie, credentials)
+    return _get_token_from_request(
+        request, authorization, access_token_cookie, credentials
+    )
+
 
 # ---------------- Local JWT verify (with retry on unknown kid) ----------------
 async def api_verify_token(token: str) -> Dict[str, Any]:
     issuer = settings.KEYCLOAK_ISSUER_URL
-    accepted_audiences: List[str] = list(settings.KEYCLOAK_AUDIENCES or ["master-realm", "account"])
+    accepted_audiences: List[str] = list(
+        settings.KEYCLOAK_AUDIENCES or ["master-realm", "account"]
+    )
 
     try:
         jwks = await _get_jwks()
@@ -98,7 +112,13 @@ async def api_verify_token(token: str) -> Dict[str, Any]:
         def pick_key(jwks_data: Dict[str, Any]) -> Optional[Dict[str, str]]:
             for key in jwks_data.get("keys", []):
                 if key.get("kid") == unverified_header.get("kid"):
-                    return {"kty": key["kty"], "kid": key["kid"], "use": key["use"], "n": key["n"], "e": key["e"]}
+                    return {
+                        "kty": key["kty"],
+                        "kid": key["kid"],
+                        "use": key["use"],
+                        "n": key["n"],
+                        "e": key["e"],
+                    }
             return None
 
         rsa_key = pick_key(jwks)
@@ -123,7 +143,9 @@ async def api_verify_token(token: str) -> Dict[str, Any]:
                 last_err = e
                 continue
 
-        raise AuthenticationError(detail="Bearer token could not be verified") from last_err
+        raise AuthenticationError(
+            detail="Bearer token could not be verified"
+        ) from last_err
 
     except AuthenticationError:
         raise
@@ -144,6 +166,7 @@ async def api_verify_token(token: str) -> Dict[str, Any]:
             extra={"title": "InternalError"},
         ) from e
 
+
 # ---------------- Roles / permissions ----------------
 def _parse_permissions(perms: Optional[Union[str, Iterable[str]]]) -> List[str]:
     if perms is None:
@@ -151,6 +174,7 @@ def _parse_permissions(perms: Optional[Union[str, Iterable[str]]]) -> List[str]:
     if isinstance(perms, str):
         return [p.strip().lower() for p in perms.split(",") if p.strip()]
     return [str(p).strip().lower() for p in perms if str(p).strip()]
+
 
 def _extract_roles(payload: Dict[str, Any]) -> List[str]:
     roles: List[str] = []
@@ -165,14 +189,21 @@ def _extract_roles(payload: Dict[str, Any]) -> List[str]:
             roles += v.get("roles") or []
     return sorted({str(r).strip().lower() for r in roles if r})
 
+
 def _check_permissions(user_roles: List[str], required: List[str], match: str) -> bool:
     if not required:
         return True
-    return all(r in user_roles for r in required) if match == "all" else any(r in user_roles for r in required)
+    return (
+        all(r in user_roles for r in required)
+        if match == "all"
+        else any(r in user_roles for r in required)
+    )
+
 
 # ---------------- Introspection cache (short TTL) ----------------
 _INTROSPECT_CACHE: Dict[str, Tuple[float, bool]] = {}
 _INTROSPECT_TTL = 30  # seconds
+
 
 async def _introspect_active(token: str) -> None:
     now = time.time()
@@ -187,12 +218,13 @@ async def _introspect_active(token: str) -> None:
     await loop.run_in_executor(None, kutils.introspect_token, token)
     _INTROSPECT_CACHE[token] = (now, True)
 
+
 # ---------------- Unified dependency ----------------
 def auth(
     permissions: Optional[Union[str, Iterable[str]]] = None,
     *,
-    match: str = "any",          # "any" or "all"
-    mode: str = "local",         # "local" | "introspect" | "both"
+    match: str = "any",  # "any" or "all"
+    mode: str = "local",  # "local" | "introspect" | "both"
 ) -> Callable[..., Dict[str, Any]]:
     required = _parse_permissions(permissions)
     match = (match or "any").lower()

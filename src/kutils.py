@@ -180,6 +180,7 @@ def is_token_active(access_token):
     else:
         return False
 
+
 @raise_keycloak_error
 def refresh_access_token(refresh_token):
     """

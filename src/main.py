@@ -1,6 +1,7 @@
 import os
 from fastapi import FastAPI
-from .service import stores
+from service import stores
+from routers.generic import install_error_handler
 import uvicorn
 import logsys
 
@@ -60,17 +61,20 @@ logsys.configure()
 api = FastAPI(
     title="WiseFood Data Catalog",
     version="0.0.1",
-    root_path=config.settings["CONTEXT_PATH"] + "/api",
+    root_path=config.settings["CONTEXT_PATH"],
 )
 
+# Initiliaze exception handlers
+install_error_handler(api)
 
 # import routers
-from .routers import recipes, guides, policies, lineage
+from routers import core
 
-api.include_router(recipes.router)
-api.include_router(guides.router)
-api.include_router(policies.router)
-api.include_router(lineage.router)
+# api.include_router(recipes.router)
+# api.include_router(guides.router)
+# api.include_router(policies.router)
+# api.include_router(lineage.router)
+api.include_router(core.router)
 
 if __name__ == "__main__":
     # Run Uvicorn programmatically using the configuration

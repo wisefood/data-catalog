@@ -1,9 +1,9 @@
 import numpy as np
 from elasticsearch import Elasticsearch
 from neo4j import GraphDatabase
-from .deps import settings
-from .es_schema import recipe_index, guide_index, policy_index
-from .graph_schema import BOOTSTRAP_CYPHER
+from deps import settings
+from es_schema import recipe_index, guide_index, policy_index
+from graph_schema import BOOTSTRAP_CYPHER
 
 _embedder = None
 def embed_text(text: str):

@@ -168,7 +168,6 @@ def install_error_handler(app: FastAPI) -> None:
 
     @app.exception_handler(RequestValidationError)
     async def handle_validation(request: Request, exc: RequestValidationError):
-        # convert to your 422 DataError
         data_error = DataError(
             detail="Validation failed",
             errors=exc.errors(),
@@ -178,7 +177,6 @@ def install_error_handler(app: FastAPI) -> None:
 
     @app.exception_handler(Exception)
     async def handle_unexpected(request: Request, exc: Exception):
-        # wrap unknowns safely
         from exceptions import APIException as _APIException
         internal = _APIException.from_unexpected(exc)
         return _to_simple_response(request, internal)
@@ -187,7 +185,6 @@ def _to_simple_response(request: Request, exc: APIException):
     """
     Convert any APIException into the minimal shape.
     """
-    # Title: either .extra['title'] or class name
     title = exc.extra.get("title", exc.__class__.__name__)
     code = getattr(exc, "code", None)
     detail = exc.detail

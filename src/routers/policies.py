@@ -2,7 +2,7 @@ from fastapi import APIRouter
 from ..models import PolicyIn
 from ..service import stores
 
-router = APIRouter(prefix="/api/v1/policies", tags=["Policy Operations"])
+router = APIRouter(prefix="/v1/policies", tags=["Policy Operations"])
 
 # static first
 @router.get("/search")

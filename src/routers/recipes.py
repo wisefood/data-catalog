@@ -2,7 +2,7 @@ from fastapi import APIRouter
 from ..models import RecipeIn
 from ..service import stores
 
-router = APIRouter(prefix="/api/v1/recipes", tags=["Recipe Operations"])
+router = APIRouter(prefix="/v1/recipes", tags=["Recipe Operations"])
 
 @router.get("/search")
 def search_recipes(q: str):

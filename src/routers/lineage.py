@@ -2,7 +2,7 @@ from fastapi import APIRouter
 from ..models import LineageEdge
 from ..service import stores
 
-router = APIRouter(prefix="/api/v1/lineage", tags=["Lineage Operations"])
+router = APIRouter(prefix="/v1/lineage", tags=["Lineage Operations"])
 
 @router.post("")
 def add_lineage(edge: LineageEdge):

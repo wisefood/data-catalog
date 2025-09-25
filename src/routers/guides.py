@@ -2,7 +2,7 @@ from fastapi import APIRouter
 from ..models import GuideIn
 from ..service import stores
 
-router = APIRouter(prefix="/api/v1/guides", tags=["Guide Operations"])
+router = APIRouter(prefix="/v1/guides", tags=["Guide Operations"])
 
 # static first
 @router.get("/search")

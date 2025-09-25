@@ -1,6 +1,5 @@
 import os
 from fastapi import FastAPI
-from service import stores
 from routers.generic import install_error_handler
 import uvicorn
 import logsys

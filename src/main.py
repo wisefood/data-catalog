@@ -4,6 +4,7 @@ from routers.generic import install_error_handler
 import uvicorn
 import logsys
 
+
 # Configuration context
 class Config:
     def __init__(self):
@@ -47,6 +48,12 @@ class Config:
         self.settings["KEYCLOAK_CLIENT_SECRET"] = os.getenv(
             "KEYCLOAK_CLIENT_SECRET", "secret"
         )
+        self.settings["CACHE_ENABLED"] = (
+            os.getenv("CACHE_ENABLED", "false").lower() == "true"
+        )
+        self.settings["REDIS_HOST"] = os.getenv("REDIS_HOST", "redis")
+        self.settings["REDIS_PORT"] = int(os.getenv("REDIS_PORT", 6379))
+
 
 # Configure application settings
 config = Config()

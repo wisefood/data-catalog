@@ -55,6 +55,7 @@ class Entity:
         self,
         name: str,
         collection_name: str,
+        dump_schema: BaseModel,
         creation_schema: BaseModel,
         update_schema: BaseModel,
     ):
@@ -68,6 +69,7 @@ class Entity:
         """
         self.name = name
         self.collection_name = collection_name
+        self.dump_schema = dump_schema
         self.creation_schema = creation_schema
         self.update_schema = update_schema
 
@@ -139,7 +141,7 @@ class Entity:
         elif identifier.startswith(f"urn:{self.name}:"):
             return identifier
         else:
-            raise ValueError(f"Invalid identifier: {identifier}")
+            return f"urn:{self.name}:{identifier}"
 
     def cache(self, urn: str, obj) -> None:
         """
@@ -166,24 +168,18 @@ class Entity:
                 logging.error(f"Failed to invalidate cache for entity {urn}: {e}")
 
     def get_cached(self, urn: str) -> Optional[Dict[str, Any]]:
-        """
-        Get the cached entity by its URN.
-
-        :param urn: The URN of the entity.
-        :return: The cached entity or None if not found.
-        """
         obj = None
         if config.settings.get("CACHE_ENABLED", False):
             try:
-                # Cache hit if no exception and obj is not None
                 obj = REDIS.get(urn)
             except Exception as e:
                 logging.error(f"Failed to get cached entity {urn}: {e}")
-        # Cache miss or caching disabled
+        
         if obj is None:
             obj = self.get(urn)
             self.cache(urn, obj)
-        return obj
+    
+        return self.dump_schema.model_validate(obj).model_dump(mode="json")
 
     def get_entity(self, urn: str) -> Dict[str, Any]:
         """
@@ -206,37 +202,39 @@ class Entity:
             "Subclasses of the Entity class must implement this method."
         )
 
-    def create_entity(self, spec) -> Dict[str, Any]:
+    def create_entity(self, spec, creator) -> Dict[str, Any]:
         """
         Create a new entity bundler method.
 
-        :param data: The data for the new entity.
+        :param spec: The data for the new entity.
+        :param creator: The dict of the creator user fetched from header.
         :return: The created entity.
         """
-        return self.create(spec)
+        self.create(spec, creator)
+        return self.get_entity(spec["urn"])
 
-    def create(self, spec) -> Dict[str, Any]:
+    def create(self, spec, creator) -> None:
         """
         Create a new entity.
 
         :param data: The validated data for the new entity.
+        :param creator: The creator user dict fetched from header.
         :return: The created entity.
         """
         raise NotImplementedError(
             "Subclasses of the Entity class must implement this method."
         )
 
-    def delete_entity(self, urn: str, purge=False) -> bool:
+    def delete_entity(self, urn: str) -> bool:
         """
         Delete an entity by its URN or UUID bundler method.
 
         :param urn: The URN or UUID of the entity to delete.
-        :param purge: Whether to permanently delete the entity.
         :return: True if the entity was deleted, False otherwise.
         """
         identifier = self.get_identifier(urn)
         self.invalidate_cache(identifier)
-        return self.delete(identifier, purge=purge)
+        return self.delete(identifier)
 
     def delete(self, urn: str, purge=False) -> bool:
         """
@@ -263,9 +261,10 @@ class Entity:
 
         identifier = self.get_identifier(urn)
         self.invalidate_cache(identifier)
-        return self.patch(identifier, spec)
+        self.patch(identifier, spec)
+        return self.get_entity(identifier)
 
-    def patch(self, urn: str, spec) -> Dict[str, Any]:
+    def patch(self, urn: str, spec) -> None:
         """
         Update an entity by its URN.
 
@@ -313,44 +312,46 @@ class Entity:
         :return: The data with upserted system fields.
         """
         # Fix URN and UUIDs
-        if "urn" in spec:
+        if "urn" in spec and not update:
             spec["urn"] = f"urn:{self.name}:{spec['urn'].split(':')[-1]}"
             spec["id"] = str(uuid.uuid4())
 
         if update and "creator" in spec:
             spec.pop("creator")
         # Generate timestamps
-        spec["updated_at"] = datetime.now()
+        spec["updated_at"] = str(datetime.now().isoformat())
         if not update:
-            spec["created_at"] = datetime.now()
+            spec["created_at"] = str(datetime.now().isoformat())
         return spec
 
 
 class Guide(Entity):
     def __init__(self):
-        super().__init__("guide", "guides", GuideCreationSchema, GuideUpdateSchema)
+        super().__init__(
+            "guide", "guides", GuideSchema, GuideCreationSchema, GuideUpdateSchema
+        )
 
     def list(
         self, limit: Optional[int] = None, offset: Optional[int] = None
     ) -> List[str]:
         return ELASTIC_CLIENT.list_entities(
-            index_name="guides", size=limit or 1000, from_=offset or 0
+            index_name="guides", size=limit or 100, offset=offset or 0
         )
 
     def fetch(
         self, limit: Optional[int] = None, offset: Optional[int] = None
     ) -> List[Dict[str, Any]]:
         return ELASTIC_CLIENT.fetch_entities(
-            index_name="guides", limit=limit or 1000, offset=offset or 0
+            index_name="guides", limit=limit or 100, offset=offset or 0
         )
 
     def get(self, urn: str) -> Dict[str, Any]:
         entity = ELASTIC_CLIENT.get_entity(index_name="guides", urn=urn)
         if entity is None:
             raise NotFoundError(f"Guide with URN {urn} not found.")
-        return entity
+        return entity 
 
-    def create(self, spec) -> Dict[str, Any]:
+    def create(self, spec: GuideCreationSchema, creator: dict) -> Dict[str, Any]:
         # Validate input data
         try:
             guide_data = self.creation_schema.model_validate(spec)
@@ -359,23 +360,52 @@ class Guide(Entity):
 
         # Check if guide with same URN already exists
         try:
-            existing = ELASTIC_CLIENT.get_entity(
-                index_name="guides", urn=guide_data.urn
-            )
+            existing = self.get_entity(urn=guide_data.urn)
             if existing is not None:
                 raise ConflictError(f"Guide with URN {guide_data.urn} already exists.")
         except NotFoundError:
             pass  # Expected if guide does not exist
 
         # Convert to dict and store in Elasticsearch
-        guide_dict = guide_data.model_dump()
+        guide_dict = guide_data.model_dump(mode="json")
+        guide_dict["creator"] = creator["preferred_username"]
         guide_dict = self.upsert_system_fields(guide_dict, update=False)
         try:
             ELASTIC_CLIENT.index_entity(index_name="guides", document=guide_dict)
         except Exception as e:
             raise InternalError(f"Failed to create guide: {e}")
 
-        return guide_dict
+    def patch(self, urn, spec):
+        # Validate input data
+        try:
+            guide_data = self.update_schema.model_validate(spec)
+        except Exception as e:
+            raise DataError(f"Invalid data for updating guide: {e}")
 
+        # Check if guide exists
+        try:
+            existing = self.get(urn=urn)
+            if existing is None:
+                raise NotFoundError(f"Guide with URN {urn} not found.")
+        except NotFoundError:
+            raise NotFoundError(f"Guide with URN {urn} not found.")
 
+        # Convert to dict and update in Elasticsearch
+        guide_dict = guide_data.model_dump(mode="json", exclude_unset=True)
+        guide_dict = self.upsert_system_fields(guide_dict, update=True)
+        guide_dict["urn"] = urn
+        try:
+            ELASTIC_CLIENT.update_entity(index_name="guides", document=guide_dict)
+        except Exception as e:
+            raise InternalError(f"Failed to update guide: {e}")
+        
+    def delete(self, urn: str) -> bool:    
+        # Permanently delete the guide
+        try:
+            ELASTIC_CLIENT.delete_entity(index_name="guides", urn=urn)
+        except Exception as e:
+            raise InternalError(f"Failed to delete guide: {e}")
+        
+        return {"deleted": urn}
+    
 GUIDE = Guide()

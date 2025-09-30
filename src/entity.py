@@ -9,18 +9,29 @@ The specific implementation of these operations is left to the subclasses.
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
 from backend.redis import REDIS
+from backend.elastic import ELASTIC_CLIENT
+from datetime import datetime
 from utils import is_valid_uuid
 from main import config
-from exceptions import NotAllowedError, DataError, InternalError, NotFoundError, ConflictError
+import uuid
+from exceptions import (
+    NotAllowedError,
+    DataError,
+    InternalError,
+    NotFoundError,
+    ConflictError,
+)
 import logging
+from schemas import GuideCreationSchema, GuideUpdateSchema, GuideSchema
+
 
 class Entity:
     """
     Base class for all catalog entities.
 
-    In ReST terminology, an entity is a resource that can be accessed via an API. 
+    In ReST terminology, an entity is a resource that can be accessed via an API.
 
-    This class provides the basic structure for all entities. It defines the common 
+    This class provides the basic structure for all entities. It defines the common
     operations that can be performed on an entity, such as listing, fetching, creating,
     updating, and deleting. The specific implementation of these operations is left to
     the subclasses.
@@ -28,17 +39,25 @@ class Entity:
     The API defined in this class is the one used by the endpoint definitions.
     """
 
-    OPERATIONS = frozenset([
-        "list",
-        "fetch",
-        "get",
-        "create",
-        "delete",
-        "search",
-        "patch",
-    ])
+    OPERATIONS = frozenset(
+        [
+            "list",
+            "fetch",
+            "get",
+            "create",
+            "delete",
+            "search",
+            "patch",
+        ]
+    )
 
-    def __init__(self, name: str, collection_name: str, creation_schema: BaseModel, update_schema: BaseModel):
+    def __init__(
+        self,
+        name: str,
+        collection_name: str,
+        creation_schema: BaseModel,
+        update_schema: BaseModel,
+    ):
         """
         Initialize the entity with its name, collection name, creation schema, and update schema.
 
@@ -56,7 +75,9 @@ class Entity:
         if update_schema is None:
             self.operations.remove("patch")
 
-    def fetch_entities(self, limit: Optional[int] = None, offset: Optional[int] = None) -> List[Dict[str, Any]]:
+    def fetch_entities(
+        self, limit: Optional[int] = None, offset: Optional[int] = None
+    ) -> List[Dict[str, Any]]:
         """
         Fetch a list of entities bundler method.
 
@@ -65,8 +86,10 @@ class Entity:
         :return: A list of entities.
         """
         return self.fetch(limit=limit, offset=offset)
-    
-    def fetch(self, limit: Optional[int] = None, offset: Optional[int] = None) -> List[Dict[str, Any]]:
+
+    def fetch(
+        self, limit: Optional[int] = None, offset: Optional[int] = None
+    ) -> List[Dict[str, Any]]:
         """
         Fetch a list of entities.
 
@@ -74,9 +97,13 @@ class Entity:
         :param offset: The number of entities to skip before starting to collect the result set.
         :return: A list of entities.
         """
-        raise NotImplementedError("Subclasses of the Entity class must implement this method.")
+        raise NotImplementedError(
+            "Subclasses of the Entity class must implement this method."
+        )
 
-    def list_entities(self, limit: Optional[int] = None, offset: Optional[int] = None) -> List[str]:
+    def list_entities(
+        self, limit: Optional[int] = None, offset: Optional[int] = None
+    ) -> List[str]:
         """
         List entities by their URNs bundler method.
 
@@ -85,8 +112,10 @@ class Entity:
         :return: A list of URNs.
         """
         return self.list(limit=limit, offset=offset)
-    
-    def list(self, limit: Optional[int] = None, offset: Optional[int] = None) -> List[str]:
+
+    def list(
+        self, limit: Optional[int] = None, offset: Optional[int] = None
+    ) -> List[str]:
         """
         List entities by their URNs.
 
@@ -94,7 +123,9 @@ class Entity:
         :param offset: The number of entities to skip before starting to collect the result set.
         :return: A list of URNs.
         """
-        raise NotImplementedError("Subclasses of the Entity class must implement this method.")
+        raise NotImplementedError(
+            "Subclasses of the Entity class must implement this method."
+        )
 
     def get_identifier(self, identifier: str) -> str:
         """
@@ -114,11 +145,11 @@ class Entity:
         """
         Cache the entity.
 
-        This method caches the entity for faster access. 
+        This method caches the entity for faster access.
         """
         if config.settings.get("CACHE_ENABLED", False):
             try:
-                REDIS.set(urn, obj)        
+                REDIS.set(urn, obj)
             except Exception as e:
                 logging.error(f"Failed to cache entity {urn}: {e}")
 
@@ -164,7 +195,6 @@ class Entity:
         identifier = self.get_identifier(urn)
         return self.get_cached(identifier)
 
-   
     def get(self, urn: str) -> Dict[str, Any]:
         """
         Get an entity by its URN or UUID.
@@ -172,7 +202,9 @@ class Entity:
         :param urn: The URN of the entity to fetch.
         :return: The entity or None if not found.
         """
-        raise NotImplementedError("Subclasses of the Entity class must implement this method.")
+        raise NotImplementedError(
+            "Subclasses of the Entity class must implement this method."
+        )
 
     def create_entity(self, spec) -> Dict[str, Any]:
         """
@@ -190,7 +222,9 @@ class Entity:
         :param data: The validated data for the new entity.
         :return: The created entity.
         """
-        raise NotImplementedError("Subclasses of the Entity class must implement this method.")
+        raise NotImplementedError(
+            "Subclasses of the Entity class must implement this method."
+        )
 
     def delete_entity(self, urn: str, purge=False) -> bool:
         """
@@ -212,7 +246,9 @@ class Entity:
         :param purge: Whether to permanently delete the entity.
         :return: True if the entity was deleted, False otherwise.
         """
-        raise NotImplementedError("Subclasses of the Entity class must implement this method.")
+        raise NotImplementedError(
+            "Subclasses of the Entity class must implement this method."
+        )
 
     def patch_entity(self, urn: str, spec) -> Dict[str, Any]:
         """
@@ -224,7 +260,7 @@ class Entity:
         """
         if self.update_schema is None:
             raise NotAllowedError(f"The {self.name} entity does not support updates.")
-        
+
         identifier = self.get_identifier(urn)
         self.invalidate_cache(identifier)
         return self.patch(identifier, spec)
@@ -237,9 +273,13 @@ class Entity:
         :param data: The validated data to update the entity with.
         :return: The updated entity.
         """
-        raise NotImplementedError("Subclasses of the Entity class must implement this method.")
+        raise NotImplementedError(
+            "Subclasses of the Entity class must implement this method."
+        )
 
-    def search_entities(self, query: str, limit: Optional[int] = None, offset: Optional[int] = None) -> List[Dict[str, Any]]:
+    def search_entities(
+        self, query: str, limit: Optional[int] = None, offset: Optional[int] = None
+    ) -> List[Dict[str, Any]]:
         """
         Search for entities bundler method.
 
@@ -250,7 +290,9 @@ class Entity:
         """
         return self.search(query=query, limit=limit, offset=offset)
 
-    def search(self, query: str, limit: Optional[int] = None, offset: Optional[int] = None) -> List[Dict[str, Any]]:
+    def search(
+        self, query: str, limit: Optional[int] = None, offset: Optional[int] = None
+    ) -> List[Dict[str, Any]]:
         """
         Search for entities.
 
@@ -259,8 +301,81 @@ class Entity:
         :param offset: The number of entities to skip before starting to collect the result set.
         :return: A list of entities matching the search query.
         """
-        raise NotImplementedError("Subclasses of the Entity class must implement this method.")
-    
+        raise NotImplementedError(
+            "Subclasses of the Entity class must implement this method."
+        )
+
+    def upsert_system_fields(self, spec: Dict, update=False) -> Dict[str, Any]:
+        """
+        Upsert system fields for the entity.
+
+        :param data: The data to upsert system fields into.
+        :return: The data with upserted system fields.
+        """
+        # Fix URN and UUIDs
+        if "urn" in spec:
+            spec["urn"] = f"urn:{self.name}:{spec['urn'].split(':')[-1]}"
+            spec["id"] = str(uuid.uuid4())
+
+        if update and "creator" in spec:
+            spec.pop("creator")
+        # Generate timestamps
+        spec["updated_at"] = datetime.now()
+        if not update:
+            spec["created_at"] = datetime.now()
+        return spec
 
 
+class Guide(Entity):
+    def __init__(self):
+        super().__init__("guide", "guides", GuideCreationSchema, GuideUpdateSchema)
 
+    def list(
+        self, limit: Optional[int] = None, offset: Optional[int] = None
+    ) -> List[str]:
+        return ELASTIC_CLIENT.list_entities(
+            index_name="guides", size=limit or 1000, from_=offset or 0
+        )
+
+    def fetch(
+        self, limit: Optional[int] = None, offset: Optional[int] = None
+    ) -> List[Dict[str, Any]]:
+        return ELASTIC_CLIENT.fetch_entities(
+            index_name="guides", limit=limit or 1000, offset=offset or 0
+        )
+
+    def get(self, urn: str) -> Dict[str, Any]:
+        entity = ELASTIC_CLIENT.get_entity(index_name="guides", urn=urn)
+        if entity is None:
+            raise NotFoundError(f"Guide with URN {urn} not found.")
+        return entity
+
+    def create(self, spec) -> Dict[str, Any]:
+        # Validate input data
+        try:
+            guide_data = self.creation_schema.model_validate(spec)
+        except Exception as e:
+            raise DataError(f"Invalid data for creating guide: {e}")
+
+        # Check if guide with same URN already exists
+        try:
+            existing = ELASTIC_CLIENT.get_entity(
+                index_name="guides", urn=guide_data.urn
+            )
+            if existing is not None:
+                raise ConflictError(f"Guide with URN {guide_data.urn} already exists.")
+        except NotFoundError:
+            pass  # Expected if guide does not exist
+
+        # Convert to dict and store in Elasticsearch
+        guide_dict = guide_data.model_dump()
+        guide_dict = self.upsert_system_fields(guide_dict, update=False)
+        try:
+            ELASTIC_CLIENT.index_entity(index_name="guides", document=guide_dict)
+        except Exception as e:
+            raise InternalError(f"Failed to create guide: {e}")
+
+        return guide_dict
+
+
+GUIDE = Guide()

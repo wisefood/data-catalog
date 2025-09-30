@@ -8,7 +8,7 @@ from es_schema import (
     organization_index,
     person_index,
 )
-from ..main import config
+from main import config
 
 
 class ElasticsearchClientSingleton:
@@ -18,12 +18,11 @@ class ElasticsearchClientSingleton:
     _counter = 0
     _lock = threading.Lock()
 
-    @classmethod
-    def get_client(cls) -> Elasticsearch:
+    def get_client(self) -> Elasticsearch:
         """Ensure pool is initialized and return one Elasticsearch client (round robin)."""
-        if not cls._pool:
-            cls._initialize_elasticsearch()
-        pool_item = cls._select_pool_item()
+        if not self._pool:
+            self._initialize_elasticsearch()
+        pool_item = self._select_pool_item()
         return pool_item
 
     @classmethod
@@ -61,24 +60,33 @@ class ElasticsearchClientSingleton:
             es.indices.create(
                 index="persons", body=person_index(config.settings["ES_DIM"])
             )
+
     @classmethod
-    def index_exists(cls, index_name: str) -> bool:
-        client = cls.get_client()
+    def _initialize_elasticsearch(cls):
+        """Initialize a pool of Elasticsearch clients."""
+        pool_size = int(config.settings.get("ELASTICSEARCH_POOL_SIZE", 5))
+        for _ in range(pool_size):
+            client = Elasticsearch(hosts=config.settings["ELASTIC_HOST"])
+            cls._pool.append(client)
+        cls._bootstrap()
+
+
+    def index_exists(self, index_name: str) -> bool:
+        client = self.get_client()
         return client.indices.exists(index=index_name)
-    
-    @classmethod
-    def get_entity(cls, index_name: str, urn: str):
-        client = cls.get_client()
+
+    def get_entity(self, index_name: str, urn: str):
+        client = self.get_client()
         try:
             r = client.get(index=index_name, id=urn)
             return r["_source"]
         except Exception:
             return None
 
-    @classmethod
-    def list_entities(cls, index_name: str, size: int = 1000) -> list[str]:
-        client = cls.get_client()
+    def list_entities(self, index_name: str, size: int = 1000, offset: int = 0) -> list[str]:
+        client = self.get_client()
         body = {
+            "from": offset,
             "size": size,
             "_source": False,
             "query": {"match_all": {}}
@@ -86,8 +94,7 @@ class ElasticsearchClientSingleton:
         r = client.search(index=index_name, body=body, _source_includes=["_id"])
         return [h["_id"] for h in r["hits"]["hits"]]
     
-    @classmethod
-    def fetch_entities(cls, index_name: str, limit: int, offset: int) -> list[dict]:
+    def fetch_entities(self, index_name: str, limit: int, offset: int) -> list[dict]:
         """
         Fetch entity representations from an Elasticsearch index
         using offset + limit pagination.
@@ -100,7 +107,7 @@ class ElasticsearchClientSingleton:
         Returns:
             List of entity documents (_source only).
         """
-        client = cls.get_client()
+        client = self.get_client()
         body = {
             "from": offset,
             "size": limit,
@@ -115,35 +122,23 @@ class ElasticsearchClientSingleton:
         return [hit["_source"] for hit in r["hits"]["hits"]]
 
     
-    @classmethod
-    def index_entity(cls, index_name: str, document: dict):
-        client = cls.get_client()
+    def index_entity(self, index_name: str, document: dict):
+        client = self.get_client()
         client.index(index=index_name, id=document["urn"], document=document, refresh="wait_for")
     
-    @classmethod
-    def delete_entity(cls, index_name: str, urn: str):
-        client = cls.get_client()
+    def delete_entity(self, index_name: str, urn: str):
+        client = self.get_client()
         client.delete(index=index_name, id=urn, refresh="wait_for")
 
-    @classmethod
-    def update_entity(cls, index_name: str, document: dict):
-        client = cls.get_client()
+    def update_entity(self, index_name: str, document: dict):
+        client = self.get_client()
         client.update(index=index_name, id=document["urn"], doc=document, refresh="wait_for")
     
-    @classmethod
-    def search_entities(cls, index_name: str, qspec):
-        client = cls.get_client()
+    def search_entities(self, index_name: str, qspec):
+        client = self.get_client()
         r = client.search(index=index_name, body=qspec)
         return [h["_source"] for h in r["hits"]["hits"]]
 
-    @classmethod
-    def _initialize_elasticsearch(cls):
-        """Initialize a pool of Elasticsearch clients."""
-        pool_size = int(config.settings.get("ELASTICSEARCH_POOL_SIZE", 5))
-        for _ in range(pool_size):
-            client = Elasticsearch(hosts=config.settings["ELASTIC_HOST"])
-            cls._pool.append(client)
-        cls._bootstrap()
 
 
-ELASTIC_CLIENT = ElasticsearchClientSingleton.get_client()
+ELASTIC_CLIENT = ElasticsearchClientSingleton()

@@ -22,7 +22,7 @@ security_scheme_name = "BearerAuth"
 bearer_scheme = HTTPBearer(
     auto_error=False,
     scheme_name=security_scheme_name,
-    description="An OAuth2 token issued by the STELAR IDP.",
+    description="An OAuth2 token issued by the WiseFood IDP.",
 )
 security_doc = security_scheme_name
 
@@ -72,7 +72,6 @@ def _extract_bearer_from_header(authorization: Optional[str]) -> Optional[str]:
 def _get_token_from_request(
     request: Request,
     authorization: Optional[str],
-    access_token_cookie: Optional[str],
     credentials: Optional[HTTPAuthorizationCredentials],
 ) -> str:
     token = None
@@ -80,8 +79,6 @@ def _get_token_from_request(
         token = credentials.credentials
     if token is None and authorization:
         token = _extract_bearer_from_header(authorization)
-    if token is None and access_token_cookie:
-        token = access_token_cookie
     if not token:
         raise AuthenticationError(detail="Bearer token is missing")
     return urllib.parse.unquote(token).strip()
@@ -91,10 +88,9 @@ def get_current_token(
     request: Request,
     authorization: Optional[str] = Header(None, alias="Authorization"),
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(bearer_scheme),
-    access_token_cookie: Optional[str] = Cookie(None, alias="access_token"),
 ) -> str:
     return _get_token_from_request(
-        request, authorization, access_token_cookie, credentials
+        request, authorization, credentials
     )
 
 

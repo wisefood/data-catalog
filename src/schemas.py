@@ -1,0 +1,201 @@
+from __future__ import annotations
+
+from datetime import datetime
+from enum import Enum
+from typing import Annotated, List, Optional, Literal, Union
+from uuid import UUID
+
+from pydantic import (
+    BaseModel,
+    Field,
+    HttpUrl,
+    EmailStr,
+    field_validator,
+    model_validator,
+    StringConstraints,
+)
+
+# ---- enums & constrained types ----
+
+UrnStr = Annotated[
+    str,
+    StringConstraints(
+        min_length=5, max_length=255, pattern=r"^urn:[a-z0-9][a-z0-9\-.:/]{2,}$"
+    ),
+]
+NonEmptyStr = Annotated[str, StringConstraints(min_length=1, max_length=2000)]
+SlugStr = Annotated[
+    str,
+    StringConstraints(
+        min_length=1, max_length=100, pattern=r"^[a-z0-9]+(?:[-_][a-z0-9]+)*$"
+    ),
+]
+Iso639_1 = Annotated[
+    str, StringConstraints(min_length=2, max_length=2, pattern=r"^[a-z]{2}$")
+]
+Iso3166_1a2 = Annotated[
+    str, StringConstraints(min_length=2, max_length=2, pattern=r"^[A-Z]{2}$")
+]
+SemVer = Annotated[str, StringConstraints(pattern=r"^\d+\.\d+\.\d+$")]
+HexSha256 = Annotated[str, StringConstraints(pattern=r"^[A-Fa-f0-9]{64}$")]
+
+
+class Status(str, Enum):
+    active = "active"
+    draft = "draft"
+    archived = "archived"
+    deleted = "deleted"
+    deprecated = "deprecated"
+
+
+class LicenseId(str, Enum):
+    MIT = "MIT"
+    Apache2 = "Apache-2.0"
+    GPL3 = "GPL-3.0"
+    CC_BY = "CC-BY-4.0"
+    CC_BY_SA = "CC-BY-SA-4.0"
+    Proprietary = "Proprietary"
+
+
+class BaseSchema(BaseModel):
+    """
+    Common catalog metadata.
+    """
+
+    urn: UrnStr = Field(
+        ..., description="Stable URN identifier, e.g., 'urn:guides:nutrition-basics-gr'"
+    )
+    id: UUID = Field(..., description="Internal UUID")
+    title: NonEmptyStr = Field(..., description="Human-readable title")
+    description: NonEmptyStr = Field(
+        ..., description="Summary/abstract of the resource (<= 2000 chars)"
+    )
+    tags: Annotated[List[NonEmptyStr], Field(min_length=0, max_length=25)] = Field(
+        default_factory=list, description="Topic tags"
+    )
+    status: Status = Field(default=Status.active, description="Lifecycle status")
+    creator: EmailStr = Field(..., description="Contact email for the creator/owner")
+    created_at: datetime = Field(..., description="Creation timestamp (UTC)")
+    updated_at: datetime = Field(..., description="Last-modified timestamp (UTC)")
+    url: HttpUrl = Field(..., description="Canonical public URL to the resource")
+    license: LicenseId = Field(..., description="License identifier")
+    language: Union[Iso639_1, None] = Field(
+        default=None, description="Language code (ISO 639-1), e.g., 'en'"
+    )
+
+    class Config:
+        extra = "forbid"
+        str_strip_whitespace = True
+
+    @field_validator("tags")
+    @classmethod
+    def unique_tags(cls, v: List[str]) -> List[str]:
+        if len(set(map(str.lower, v))) != len(v):
+            raise ValueError("tags must be unique (case-insensitive)")
+        return v
+
+    @model_validator(mode="after")
+    def check_times(self):
+        if self.updated_at < self.created_at:
+            raise ValueError("updated_at must be >= created_at")
+        return self
+
+
+class ArtifactSchema(BaseSchema):
+    type: Literal["artifact"] = Field(
+        "artifact", description="Resource type discriminator"
+    )
+    file_url: str
+    file_type: str
+    file_size: int
+
+
+class GuideSchema(BaseSchema):
+    type: Literal["guide"] = Field(
+        default="guide", description="Resource type discriminator", exclude=True
+    )
+    region: Optional[Iso3166_1a2] = Field(
+        None, description="Intended region (ISO 3166-1 alpha-2)"
+    )
+    content: str
+    topic: str | None = None
+    audience: str | None = None
+    artifacts: List[ArtifactSchema] = Field(default_factory=list)
+
+
+class GuideCreationSchema(BaseModel):
+    """
+    Schema for creating a new guide. System generates: id, creator, created_at, updated_at.
+    User provides URN as a slug (e.g., 'switzerland_calcium_intake_guide'),
+    system prepends 'urn:guide:' internally.
+    """
+
+    urn: SlugStr = Field(
+        ..., description="URN slug (e.g., 'switzerland_calcium_intake_guide')"
+    )
+    title: NonEmptyStr = Field(..., description="Human-readable title")
+    description: NonEmptyStr = Field(
+        ..., description="Summary/abstract of the resource (<= 300 chars)"
+    )
+    tags: Annotated[List[NonEmptyStr], Field(min_length=0, max_length=25)] = Field(
+        default_factory=list, description="Topic tags"
+    )
+    status: Status = Field(default=Status.active, description="Lifecycle status")
+    url: HttpUrl = Field(..., description="Canonical public URL to the resource")
+    license: LicenseId = Field(..., description="License identifier")
+    region: Optional[Iso3166_1a2] = Field(
+        None, description="Intended region (ISO 3166-1 alpha-2)"
+    )
+    content: str = Field(..., description="Guide content")
+    topic: str | None = None
+    audience: str | None = None
+    language: Union[Iso639_1, None] = None
+    artifacts: List[ArtifactSchema] = Field(default_factory=list)
+
+    class Config:
+        extra = "forbid"
+        str_strip_whitespace = True
+
+    @field_validator("tags")
+    @classmethod
+    def unique_tags(cls, v: List[str]) -> List[str]:
+        if len(set(map(str.lower, v))) != len(v):
+            raise ValueError("tags must be unique (case-insensitive)")
+        return v
+
+
+class GuideUpdateSchema(BaseModel):
+    """
+    Schema for updating an existing guide. All fields optional.
+    System fields (id, urn, creator, created_at, updated_at) cannot be modified.
+    """
+
+    title: NonEmptyStr | None = None
+    description: NonEmptyStr | None = None
+    tags: Annotated[List[NonEmptyStr], Field(min_length=0, max_length=25)] | None = None
+    status: Status | None = None
+    url: HttpUrl | None = None
+    license: LicenseId | None = None
+    region: Optional[Iso3166_1a2] = None
+    content: str | None = None
+    topic: str | None = None
+    audience: str | None = None
+    language: Union[Iso639_1, None] = None
+    artifacts: List[ArtifactSchema] | None = None
+
+    class Config:
+        extra = "forbid"
+        str_strip_whitespace = True
+
+    @field_validator("tags")
+    @classmethod
+    def unique_tags(cls, v: List[str] | None) -> List[str] | None:
+        if v is not None and len(set(map(str.lower, v))) != len(v):
+            raise ValueError("tags must be unique (case-insensitive)")
+        return v
+
+    @model_validator(mode="after")
+    def at_least_one_field(self):
+        if all(getattr(self, field) is None for field in self.model_fields):
+            raise ValueError("At least one field must be provided for update")
+        return self

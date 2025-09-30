@@ -3,10 +3,9 @@ from main import config
 
 from exceptions import (
     BadGatewayError,
-    NotFoundError,
 )
-import traceback
-
+import logging
+import json
 
 class RedisClient:
     _pool = None
@@ -20,6 +19,7 @@ class RedisClient:
             decode_responses=True,
             max_connections=10,
         )
+        logging.info("Initialized Redis connection pool")
         return cls._pool
 
     def set(self, key, value):
@@ -28,9 +28,12 @@ class RedisClient:
             if self._pool is None:
                 self._initialize_redis()
             conn = redis.Redis(connection_pool=self._pool)
-            conn.set(key, value)
+            if isinstance(value, dict):
+                conn.set(key, json.dumps(value))  # Serialize dict to JSON string
+            else:
+                conn.set(key, value)
         except Exception as e:
-            raise BadGatewayError("Redis error", detail=traceback.format_exc())
+            raise BadGatewayError(e)
 
     def get(self, key):
         """Get a value from Redis using a connection from the pool."""
@@ -39,9 +42,12 @@ class RedisClient:
                 self._initialize_redis()
             conn = redis.Redis(connection_pool=self._pool)
             value = conn.get(key)
-            return value
+            try:
+                return json.loads(value)  # Attempt to deserialize JSON string
+            except (TypeError, json.JSONDecodeError):
+                return value  # Return as-is if not JSON
         except Exception as e:
-            raise BadGatewayError("Redis error", detail=traceback.format_exc())
+            raise BadGatewayError(e)
 
     def delete(self, key):
         """Delete a value from Redis using a connection from the pool."""
@@ -51,7 +57,7 @@ class RedisClient:
             conn = redis.Redis(connection_pool=self._pool)
             conn.delete(key)
         except Exception as e:
-            raise BadGatewayError("Redis error", detail=traceback.format_exc())
+            raise BadGatewayError(e)
 
 
 # Create a singleton instance of RedisClient

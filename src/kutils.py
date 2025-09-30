@@ -1,11 +1,8 @@
-import base64
 import datetime
 import json
 import logging
-import smtplib
-import ssl
 from functools import wraps
-from io import BytesIO
+from typing import Optional, Dict
 from keycloak import (
     KeycloakAuthenticationError,
     KeycloakConnectionError,
@@ -16,10 +13,8 @@ from keycloak import (
     KeycloakPutError,
 )
 
-import requests
 from backend.keycloak import KEYCLOAK_ADMIN_CLIENT, KEYCLOAK_OPENID_CLIENT
 from exceptions import (
-    APIException,
     AuthenticationError,
     AuthorizationError,
     ConflictError,
@@ -28,6 +23,7 @@ from exceptions import (
     NotFoundError,
 )
 from utils import is_valid_uuid
+from fastapi import Request
 
 logger = logging.getLogger(__name__)
 
@@ -158,6 +154,36 @@ def introspect_admin_token(access_token):
 
     return True
 
+def current_token(request: Request) -> Optional[str]:
+    """
+    Extracts the current access token from the Authorization header.
+
+    Args:
+        request (Request): The incoming HTTP request.
+
+    Returns:
+        str | None: The access token if available, otherwise None.
+    """
+    auth_header = request.headers.get("Authorization")
+    if auth_header and auth_header.startswith("Bearer "):
+        return auth_header.split(" ", 1)[1]
+    return None
+
+
+def current_user(request: Request) -> Optional[Dict]:
+    """
+    Resolves the current user from the access token in the request headers.
+
+    Args:
+        request (Request): The incoming HTTP request.
+
+    Returns:
+        dict | None: A dictionary containing user information if available, otherwise None.
+    """
+    token = current_token(request)
+    if token:
+        return get_user_by_token(token)
+    return None
 
 def get_user_by_token(access_token):
     """

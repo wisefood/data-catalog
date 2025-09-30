@@ -54,7 +54,8 @@ class ElasticsearchClientSingleton:
             )
         if not es.indices.exists(index="organizations"):
             es.indices.create(
-                index="organizations", body=organization_index(config.settings["ES_DIM"])
+                index="organizations",
+                body=organization_index(config.settings["ES_DIM"]),
             )
         if not es.indices.exists(index="persons"):
             es.indices.create(
@@ -70,7 +71,6 @@ class ElasticsearchClientSingleton:
             cls._pool.append(client)
         cls._bootstrap()
 
-
     def index_exists(self, index_name: str) -> bool:
         client = self.get_client()
         return client.indices.exists(index=index_name)
@@ -83,17 +83,19 @@ class ElasticsearchClientSingleton:
         except Exception:
             return None
 
-    def list_entities(self, index_name: str, size: int = 1000, offset: int = 0) -> list[str]:
+    def list_entities(
+        self, index_name: str, size: int = 1000, offset: int = 0
+    ) -> list[str]:
         client = self.get_client()
         body = {
             "from": offset,
             "size": size,
             "_source": False,
-            "query": {"match_all": {}}
+            "query": {"bool": {"must_not": {"term": {"status": "deleted"}}}},
         }
         r = client.search(index=index_name, body=body, _source_includes=["_id"])
         return [h["_id"] for h in r["hits"]["hits"]]
-    
+
     def fetch_entities(self, index_name: str, limit: int, offset: int) -> list[dict]:
         """
         Fetch entity representations from an Elasticsearch index
@@ -111,9 +113,7 @@ class ElasticsearchClientSingleton:
         body = {
             "from": offset,
             "size": limit,
-            "query": {
-                "match_all": {}
-            }
+            "query": {"bool": {"must_not": {"term": {"status": "deleted"}}}},
         }
         r = client.search(
             index=index_name,
@@ -121,24 +121,26 @@ class ElasticsearchClientSingleton:
         )
         return [hit["_source"] for hit in r["hits"]["hits"]]
 
-    
     def index_entity(self, index_name: str, document: dict):
         client = self.get_client()
-        client.index(index=index_name, id=document["urn"], document=document, refresh="wait_for")
-    
+        client.index(
+            index=index_name, id=document["urn"], document=document, refresh="wait_for"
+        )
+
     def delete_entity(self, index_name: str, urn: str):
         client = self.get_client()
         client.delete(index=index_name, id=urn, refresh="wait_for")
 
     def update_entity(self, index_name: str, document: dict):
         client = self.get_client()
-        client.update(index=index_name, id=document["urn"], doc=document, refresh="wait_for")
-    
+        client.update(
+            index=index_name, id=document["urn"], doc=document, refresh="wait_for"
+        )
+
     def search_entities(self, index_name: str, qspec):
         client = self.get_client()
         r = client.search(index=index_name, body=qspec)
         return [h["_source"] for h in r["hits"]["hits"]]
-
 
 
 ELASTIC_CLIENT = ElasticsearchClientSingleton()

@@ -1,15 +1,38 @@
 from fastapi import APIRouter, Request, Depends
-from schemas import GuideCreationSchema
+from schemas import GuideCreationSchema, GuideUpdateSchema
 from routers.generic import render
+import kutils
 from auth import auth
 from entity import GUIDE
-router = APIRouter(prefix="/api/v1/guides", tags=["Nutrional Guide Operations"])
+router = APIRouter(prefix="/api/v1/guides", tags=["Nutritional Guide Operations"])
+
+
+@router.get("/", )
+@render()
+def api_list_guides(request: Request, limit: int = 100, offset: int = 0):
+    return GUIDE.list_entities(limit=limit, offset=offset)
+
+@router.get(".fetch", )
+@render()
+def api_fetch_guides(request: Request, limit: int = 100, offset: int = 0):
+    return GUIDE.fetch_entities(limit=limit, offset=offset)
 
 @router.get("/{urn}")
 @render()
-def get_guide(urn: str, request: Request, dependencies=[Depends(auth())]):
+def api_get_guide(request: Request, urn: str):
     return GUIDE.get_entity(urn)
 
-@router.post("")
-def add_guide(g: GuideCreationSchema):
-    return GUIDE.create_entity(g.model_dump())
+@router.post("/", )
+@render()
+def api_create_guide(request: Request, g: GuideCreationSchema):
+    return GUIDE.create_entity(g.model_dump(mode="json"))
+
+@router.patch("/{urn}")
+@render()
+def api_patch_guide(request: Request, urn: str, g: GuideUpdateSchema):
+    return GUIDE.patch_entity(urn, g.model_dump(mode="json", exclude_unset=True))
+
+@router.delete("/{urn}")
+@render()
+def api_delete_guide(request: Request, urn: str):
+    return GUIDE.delete_entity(urn)

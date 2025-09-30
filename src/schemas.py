@@ -13,6 +13,7 @@ from pydantic import (
     field_validator,
     model_validator,
     StringConstraints,
+    ConfigDict,
 )
 
 # ---- enums & constrained types ----
@@ -20,7 +21,7 @@ from pydantic import (
 UrnStr = Annotated[
     str,
     StringConstraints(
-        min_length=5, max_length=255, pattern=r"^urn:[a-z0-9][a-z0-9\-.:/]{2,}$"
+        min_length=5, max_length=255, pattern=r"^urn:[a-z0-9][a-z0-9\-._:/]{2,}$"
     ),
 ]
 NonEmptyStr = Annotated[str, StringConstraints(min_length=1, max_length=2000)]
@@ -61,6 +62,11 @@ class BaseSchema(BaseModel):
     """
     Common catalog metadata.
     """
+    model_config = ConfigDict(
+        extra="forbid",
+        str_strip_whitespace=True,
+        use_enum_values=True,
+    )
 
     urn: UrnStr = Field(
         ..., description="Stable URN identifier, e.g., 'urn:guides:nutrition-basics-gr'"
@@ -74,7 +80,7 @@ class BaseSchema(BaseModel):
         default_factory=list, description="Topic tags"
     )
     status: Status = Field(default=Status.active, description="Lifecycle status")
-    creator: EmailStr = Field(..., description="Contact email for the creator/owner")
+    creator: Optional[EmailStr] = Field(None, description="Contact email for the creator/owner")
     created_at: datetime = Field(..., description="Creation timestamp (UTC)")
     updated_at: datetime = Field(..., description="Last-modified timestamp (UTC)")
     url: HttpUrl = Field(..., description="Canonical public URL to the resource")
@@ -83,10 +89,6 @@ class BaseSchema(BaseModel):
         default=None, description="Language code (ISO 639-1), e.g., 'en'"
     )
 
-    class Config:
-        extra = "forbid"
-        str_strip_whitespace = True
-
     @field_validator("tags")
     @classmethod
     def unique_tags(cls, v: List[str]) -> List[str]:
@@ -94,20 +96,18 @@ class BaseSchema(BaseModel):
             raise ValueError("tags must be unique (case-insensitive)")
         return v
 
-    @model_validator(mode="after")
-    def check_times(self):
-        if self.updated_at < self.created_at:
-            raise ValueError("updated_at must be >= created_at")
-        return self
-
-
 class ArtifactSchema(BaseSchema):
     type: Literal["artifact"] = Field(
-        "artifact", description="Resource type discriminator"
+        default="artifact", description="Resource type discriminator"
     )
     file_url: str
     file_type: str
     file_size: int
+
+    def model_dump(self, **kwargs):
+        data = super().model_dump(**kwargs)
+        data['type'] = 'artifact'
+        return data
 
 
 class GuideSchema(BaseSchema):
@@ -121,7 +121,25 @@ class GuideSchema(BaseSchema):
     topic: str | None = None
     audience: str | None = None
     artifacts: List[ArtifactSchema] = Field(default_factory=list)
+    publication_date: Optional[datetime] = Field(
+        None, description="Original publication date (UTC)"
+    )
 
+class RecipeCollectionSchema(BaseSchema):
+    type: Literal["recipe_collection"] = Field(
+        default="recipe_collection", description="Resource type discriminator", exclude=True
+    )
+    ingredients: list[dict]
+    instructions: str | None = None
+    nutrition: dict | None = None
+
+    def model_dump(self, **kwargs):
+        data = super().model_dump(**kwargs)
+        data['type'] = 'recipe_collection'
+        return data
+
+
+# ---- Creation and Update Schemas ----
 
 class GuideCreationSchema(BaseModel):
     """
@@ -129,13 +147,18 @@ class GuideCreationSchema(BaseModel):
     User provides URN as a slug (e.g., 'switzerland_calcium_intake_guide'),
     system prepends 'urn:guide:' internally.
     """
+    model_config = ConfigDict(
+        extra="forbid",
+        str_strip_whitespace=True,
+        use_enum_values=True,
+    )
 
     urn: SlugStr = Field(
         ..., description="URN slug (e.g., 'switzerland_calcium_intake_guide')"
     )
     title: NonEmptyStr = Field(..., description="Human-readable title")
     description: NonEmptyStr = Field(
-        ..., description="Summary/abstract of the resource (<= 300 chars)"
+        ..., description="Summary/abstract of the resource (<= 2000 chars)"
     )
     tags: Annotated[List[NonEmptyStr], Field(min_length=0, max_length=25)] = Field(
         default_factory=list, description="Topic tags"
@@ -146,15 +169,16 @@ class GuideCreationSchema(BaseModel):
     region: Optional[Iso3166_1a2] = Field(
         None, description="Intended region (ISO 3166-1 alpha-2)"
     )
+    publication_date: Optional[datetime] = Field(
+        None, description="Original publication date (UTC)"
+    )
     content: str = Field(..., description="Guide content")
     topic: str | None = None
     audience: str | None = None
     language: Union[Iso639_1, None] = None
-    artifacts: List[ArtifactSchema] = Field(default_factory=list)
-
-    class Config:
-        extra = "forbid"
-        str_strip_whitespace = True
+    artifacts: List[ArtifactSchema] = Field(
+        default_factory=list, description="List of associated artifacts"
+    )
 
     @field_validator("tags")
     @classmethod
@@ -169,6 +193,11 @@ class GuideUpdateSchema(BaseModel):
     Schema for updating an existing guide. All fields optional.
     System fields (id, urn, creator, created_at, updated_at) cannot be modified.
     """
+    model_config = ConfigDict(
+        extra="forbid",
+        str_strip_whitespace=True,
+        use_enum_values=True,
+    )
 
     title: NonEmptyStr | None = None
     description: NonEmptyStr | None = None
@@ -182,11 +211,7 @@ class GuideUpdateSchema(BaseModel):
     audience: str | None = None
     language: Union[Iso639_1, None] = None
     artifacts: List[ArtifactSchema] | None = None
-
-    class Config:
-        extra = "forbid"
-        str_strip_whitespace = True
-
+    publication_date: Optional[datetime] = None
     @field_validator("tags")
     @classmethod
     def unique_tags(cls, v: List[str] | None) -> List[str] | None:

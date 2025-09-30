@@ -19,6 +19,7 @@ class Config:
         self.settings["ELASTIC_HOST"] = os.getenv(
             "ELASTIC_HOST", "http://elasticsearch:9200"
         )
+        self.settings["ES_DIM"] = int(os.getenv("ES_DIM", 384))
         self.settings["MINIO_ENDPOINT"] = os.getenv(
             "MINIO_ENDPOINT", "http://minio:9000"
         )

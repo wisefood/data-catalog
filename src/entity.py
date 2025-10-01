@@ -512,7 +512,7 @@ class Artifact(Entity):
         :param description: Optional description
         :param language: Optional language code
         :param creator: Creator user dict from request
-        :param token: JWT token for personalized MinIO client
+        :param token: JWT token 
         :return: Created artifact document
         :raises DataError: If file validation fails
         :raises NotFoundError: If parent entity doesn't exist
@@ -544,12 +544,13 @@ class Artifact(Entity):
         # Determine content type
         content_type = file.content_type or "application/octet-stream"
         
-        # Get personalized MinIO client
+        # Use ROOT client for uploads (has write permissions)
+        # Personalized client would be for user-specific file access
         try:
-            minio_client = MINIO_CLIENT
+            minio_client = MINIO_CLIENT()
         except Exception as e:
-            logger.error(f"Failed to get personalized MinIO client: {e}")
-            raise InternalError(f"Failed to authenticate with storage service: {e}")
+            logger.error(f"Failed to get MinIO client: {e}")
+            raise InternalError(f"Failed to initialize storage client: {e}")
         
         # Create organized object path
         # Format: parent_type/parent_id/filename
@@ -560,6 +561,7 @@ class Artifact(Entity):
             object_name = f"artifacts/{unique_filename}"
         
         # Upload file to MinIO
+
         try:
             minio_client.put_object(
                 bucket_name=self.BUCKET_NAME,
@@ -567,10 +569,6 @@ class Artifact(Entity):
                 data=BytesIO(file_content),
                 length=file_size,
                 content_type=content_type,
-            )
-            logger.info(
-                f"Uploaded file to MinIO: {self.BUCKET_NAME}/{object_name} "
-                f"({file_size:,} bytes)"
             )
         except S3Error as e:
             logger.error(f"Failed to upload file to MinIO: {e}")
@@ -599,6 +597,7 @@ class Artifact(Entity):
             artifact_id = self.create(artifact_spec, creator)
             return self.get_entity(artifact_id)
         except Exception as e:
+            # Cleanup orphaned file
             try:
                 minio_client.remove_object(self.BUCKET_NAME, object_name)
                 logger.warning(f"Cleaned up orphaned file {object_name} after failed artifact creation")

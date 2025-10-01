@@ -1,13 +1,14 @@
-import subprocess
 import threading
 import urllib3
 import logging
-import json
 from minio import MinioAdmin
 from minio import Minio
-from minio.credentials.providers import StaticProvider
-
+import requests
 from main import config
+import xml.etree.ElementTree as ET
+from minio.error import S3Error
+from exceptions import InternalError
+
 
 logger = logging.getLogger(__name__)
 
@@ -62,7 +63,7 @@ class MinioClientSingleton:
 
             # object‐storage client
             cls.client = Minio(
-                endpoint,
+                endpoint=endpoint,
                 access_key=access_key,
                 secret_key=secret_key,
                 secure=secure,
@@ -71,7 +72,7 @@ class MinioClientSingleton:
 
             # admin client (reusing same pool & credentials provider)
             cls.admin = MinioAdmin(
-                endpoint,
+                endpoint=endpoint,
                 credentials=cls.client._provider,
                 secure=secure,
                 http_client=pool,
@@ -92,6 +93,74 @@ class MinioClientSingleton:
         if not cls._initialized:
             cls._initialize()
         return cls.admin
+    
+    @classmethod
+    def get_personalized_client(cls, token) -> Minio:
+        """Returns a Minio client for a specific user given their token."""
+ 
+        endpoint = config.settings["MINIO_ENDPOINT"].replace("http://", "").replace("https://", "")
+        req = {
+            "Action": "AssumeRoleWithWebIdentity",
+            "WebIdentityToken": token,
+            "Version": "2011-06-15",
+            "DurationSeconds": "3600",
+        }
+        try:
+            response = requests.post(url=f"{config.settings['MINIO_ENDPOINT']}", params=req)
+        except Exception as e:
+            logger.error(f"Failed to get personal Minio client: {e}")
+            raise InternalError("Failed to get personal Minio client:", e) from e
 
-MINIO_ADMIN = MinioClientSingleton.get_admin
-MINIO_CLIENT = MinioClientSingleton.get_client
+        try:
+            if response.status_code in range(200, 300):
+                # Parse the XML response
+                root = ET.fromstring(response.text)
+
+                # Extracting relevant information from the XML
+                credentials = root.find(
+                    ".//{https://sts.amazonaws.com/doc/2011-06-15/}Credentials"
+                )
+                if credentials is not None:
+                    access_key = (
+                        credentials.find(
+                            "{https://sts.amazonaws.com/doc/2011-06-15/}AccessKeyId"
+                        ).text
+                        if credentials.find(
+                            "{https://sts.amazonaws.com/doc/2011-06-15/}AccessKeyId"
+                        )
+                        is not None
+                        else None
+                    )
+                    secret_key = (
+                        credentials.find(
+                            "{https://sts.amazonaws.com/doc/2011-06-15/}SecretAccessKey"
+                        ).text
+                        if credentials.find(
+                            "{https://sts.amazonaws.com/doc/2011-06-15/}SecretAccessKey"
+                        )
+                        is not None
+                        else None
+                    )
+                    session_token = (
+                        credentials.find(
+                            "{https://sts.amazonaws.com/doc/2011-06-15/}SessionToken"
+                        ).text
+                        if credentials.find(
+                            "{https://sts.amazonaws.com/doc/2011-06-15/}SessionToken"
+                        )
+                        is not None
+                        else None
+                    )
+                    return Minio(
+                        endpoint,
+                        access_key=access_key,
+                        secret_key=secret_key,
+                        session_token=session_token,
+                        secure=False,
+                    )
+        except ET.ParseError as e:
+            raise InternalError("Failed to parse XML:", e) from e
+
+MINIO_ADMIN = MinioClientSingleton.get_admin()
+MINIO_CLIENT = MinioClientSingleton.get_client()
+MINIO = MinioClientSingleton

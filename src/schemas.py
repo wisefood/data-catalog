@@ -107,7 +107,7 @@ class BaseSchema(BaseModel):
         default_factory=list, description="Topic tags"
     )
     status: Status = Field(default=Status.active, description="Lifecycle status")
-    creator: Optional[EmailStr] = Field(None, description="Contact email for the creator/owner")
+    creator: Optional[str] = Field(None, description="Contact email for the creator/owner")
     created_at: datetime = Field(..., description="Creation timestamp (UTC)")
     updated_at: datetime = Field(..., description="Last-modified timestamp (UTC)")
     url: HttpUrl = Field(..., description="Canonical public URL to the resource")
@@ -123,19 +123,74 @@ class BaseSchema(BaseModel):
             raise ValueError("tags must be unique (case-insensitive)")
         return v
 
-class ArtifactSchema(BaseSchema):
+class ArtifactSchema(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+        str_strip_whitespace=True,
+        use_enum_values=True,
+    )
+    id: UUID = Field(..., description="Internal UUID")
+    parent_urn: UrnStr = Field(..., description="URN of the parent resource (e.g., guide)")
+    title: NonEmptyStr = Field(..., description="Human-readable title")
+    description: NonEmptyStr = Field(
+        ..., description="Summary/abstract of the resource (<= 2000 chars)"
+    )
     type: Literal["artifact"] = Field(
         default="artifact", description="Resource type discriminator"
     )
-    file_url: str
+    creator: Optional[str] = Field(None, description="Contact email for the creator/owner")
+    created_at: datetime = Field(..., description="Creation timestamp (UTC)")
+    updated_at: datetime = Field(..., description="Last-modified timestamp (UTC)")
+    file_url: HttpUrl = Field(..., description="URL to download the artifact")
+    file_s3_url: Optional[str] = Field(
+        None, description="S3 URL for internal use (if applicable)"
+    )
     file_type: str
     file_size: int
+    language: Union[Iso639_1, None] = Field(
+        default=None, description="Language code (ISO 639-1), e.g., 'en'"
+    )
 
     def model_dump(self, **kwargs):
         data = super().model_dump(**kwargs)
         data['type'] = 'artifact'
         return data
 
+
+class ArtifactCreationSchema(BaseModel):
+    """
+    Schema for creating a new artifact. System generates: id, creator, created_at, updated_at.
+    User provides URN of the parent resource (e.g., guide).
+    """
+    model_config = ConfigDict(
+        extra="forbid",
+        str_strip_whitespace=True,
+        use_enum_values=True,
+    )
+
+    parent_urn: UrnStr = Field(..., description="URN of the parent resource (e.g., guide)")
+    title: NonEmptyStr = Field(..., description="Human-readable title")
+    description: Optional[NonEmptyStr] = Field(
+        None, description="Summary/abstract of the resource (<= 2000 chars)"
+    )
+    file_url: HttpUrl = Field(..., description="URL to download the artifact")
+    file_type: str = Field(..., description="MIME type of the artifact (e.g., 'application/pdf')")
+    file_size: int = Field(..., ge=0, description="Size of the artifact in bytes")
+
+
+class ArtifactUpdateSchema(BaseModel):
+    """
+    Schema for updating an existing artifact. All fields optional.
+    System fields (id, parent_urn, creator, created_at, updated_at) cannot be modified.
+    """
+    model_config = ConfigDict(
+        extra="forbid",
+        str_strip_whitespace=True,
+        use_enum_values=True,
+    )
+    file_type: str = Field(..., description="MIME type of the artifact (e.g., 'application/pdf')")
+    title: NonEmptyStr | None = None
+    description: NonEmptyStr | None = None
 
 class GuideSchema(BaseSchema):
     type: Literal["guide"] = Field(

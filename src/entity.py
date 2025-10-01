@@ -10,6 +10,7 @@ from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
 from backend.redis import REDIS
 from backend.elastic import ELASTIC_CLIENT
+from backend.minio import MINIO
 from datetime import datetime
 from utils import is_valid_uuid
 from main import config
@@ -22,8 +23,17 @@ from exceptions import (
     ConflictError,
 )
 import logging
-from schemas import GuideCreationSchema, GuideUpdateSchema, GuideSchema, SearchSchema
+from schemas import (
+    GuideCreationSchema,
+    GuideUpdateSchema,
+    GuideSchema,
+    SearchSchema,
+    ArtifactCreationSchema,
+    ArtifactSchema,
+    ArtifactUpdateSchema,
+)
 
+logger = logging.getLogger(__name__)
 
 class Entity:
     """
@@ -129,6 +139,31 @@ class Entity:
             "Subclasses of the Entity class must implement this method."
         )
 
+    @staticmethod
+    def resolve_type(urn: str) -> str:
+        """
+        Resolve the type of an entity given its URN.
+
+        :param urn: The URN of the entity.
+        :return: The type of the entity.
+        """
+        try:
+            return urn.split(":")[1]
+        except Exception as e:
+            raise DataError(f"Invalid URN format: {urn}. Error: {e}")
+
+    @staticmethod
+    def validate_existence(urn: str) -> None:
+        """
+        Validate the existence of an entity given its URN.
+
+        :param urn: The URN of the entity.
+        :return: True if the entity exists, False otherwise.
+        """
+        entity_type = Entity.resolve_type(urn)
+        if entity_type == "guide":
+            GUIDE.get(urn)
+
     def get_identifier(self, identifier: str) -> str:
         """
         Get the URN of an entity given its URN or UUID.
@@ -137,6 +172,8 @@ class Entity:
         :return: The URN of the entity.
         """
         if is_valid_uuid(identifier):
+            if self.name == "artifact":
+                return identifier
             return self.resolve_urn(identifier)
         elif identifier.startswith(f"urn:{self.name}:"):
             return identifier
@@ -228,7 +265,7 @@ class Entity:
         :return: The created entity.
         """
         self.create(spec, creator)
-        return self.get_entity(spec["urn"])
+        return self.get_entity(spec.get("urn", spec.get("id")))
 
     def create(self, spec, creator) -> None:
         """
@@ -335,6 +372,9 @@ class Entity:
             spec["urn"] = f"urn:{self.name}:{spec['urn'].split(':')[-1]}"
             spec["id"] = str(uuid.uuid4())
 
+        if not update and self.name == "artifact":
+            spec["id"] = str(uuid.uuid4())
+
         if update and "creator" in spec:
             spec.pop("creator")
         # Generate timestamps
@@ -343,70 +383,105 @@ class Entity:
             spec["created_at"] = str(datetime.now().isoformat())
         return spec
 
-#-----------------------------------
+
+# -----------------------------------
 #
 #  *** Artifact Entity ***
-#  The artifact entity is currently 
-#  hosts all features related to 
+#
+#  The artifact entity is currently
+#  hosts all features related to
 #  linking resources under a catalog
-#  entity. It is not considered 
-#  a standalone entity and its 
+#  entity. It is not considered
+#  a standalone entity and its
 #  existence is tied to the
 #  existence of the parent entity.
-#  
-#-----------------------------------
+#
+# -----------------------------------
 class Artifact(Entity):
     def __init__(self):
         super().__init__(
-            "artifact", "artifacts", BaseModel, BaseModel, None
+            "artifact",
+            "artifacts",
+            ArtifactSchema,
+            ArtifactCreationSchema,
+            ArtifactUpdateSchema,
         )
 
     def list(
         self, limit: Optional[int] = None, offset: Optional[int] = None
     ) -> List[str]:
-        raise NotImplementedError(
-            "The Artifact entity does not support listing."
-        )
+        raise NotImplementedError("The Artifact entity does not support listing.")
 
     def fetch(
         self, limit: Optional[int] = None, offset: Optional[int] = None
     ) -> List[Dict[str, Any]]:
-        raise NotImplementedError(
-            "The Artifact entity does not support fetching."
-        )
+        raise NotImplementedError("The Artifact entity does not support fetching.")
 
     def search(
-        self, query: Dict[str, Any],
+        self,
+        query: Dict[str, Any],
     ):
-        raise NotImplementedError(
-            "The Artifact entity does not support searching."
-        )
+        raise NotAllowedError("The Artifact entity does not support searching.")
 
     def get(self, urn: str) -> Dict[str, Any]:
-        raise NotImplementedError(
-            "The Artifact entity does not support getting."
-        )
+        entity = ELASTIC_CLIENT.get_entity(index_name=self.collection_name, urn=urn)
+        if entity is None:
+            raise NotFoundError(f"Artifact with ID {urn} not found.")
+        return entity
 
-    def create(self, spec: BaseModel, creator: dict) -> Dict[str, Any]:
-        raise NotImplementedError(
-            "The Artifact entity does not support creating."
-        )
+    def create_entity(self, spec, creator) -> Dict[str, Any]:
+        """
+        Create a new entity bundler method.
+
+        :param spec: The data for the new entity.
+        :param creator: The dict of the creator user fetched from header.
+        :return: The created entity.
+        """
+        id = self.create(spec, creator)
+        return self.get_entity(id)
+
+    def create(self, spec: BaseModel, creator: dict) -> str:
+        # Validate input data
+        try:
+            artifact_data = self.creation_schema.model_validate(spec)
+        except Exception as e:
+            raise DataError(f"Invalid data for creating artifact: {e}")
+
+        # Check if the parent entity exists, this will throw NotFoundError if not
+        Entity.validate_existence(artifact_data.parent_urn)
+
+        artifact_data = artifact_data.model_dump(mode="json")
+        artifact_data["creator"] = creator["preferred_username"]
+        artifact_data = self.upsert_system_fields(artifact_data, update=False)
+        logger.info(f"Creating artifact with data: {artifact_data}")
+        try:
+            ELASTIC_CLIENT.index_entity(
+                index_name=self.collection_name, document=artifact_data
+            )
+        except Exception as e:
+            raise InternalError(f"Failed to create artifact: {e}")
+
+        return artifact_data["id"]
+    
+    def upload(self, file) -> Dict[str, Any]:
+        return
 
     def patch(self, urn, spec):
-        raise NotImplementedError(
-            "The Artifact entity does not support updating."
-        )
+        raise NotImplementedError("The Artifact entity does not support updating.")
 
     def delete(self, urn: str) -> bool:
-        raise NotImplementedError(
-            "The Artifact entity does not support deleting."
-        )
+        raise NotImplementedError("The Artifact entity does not support deleting.")
 
-#-----------------------------------
+
+ARTIFACT = Artifact()
+
+
+# -----------------------------------
 #
 #  Dietary Guide Entity
-#  
-#-----------------------------------
+#
+# -----------------------------------
+
 
 class Guide(Entity):
     def __init__(self):
@@ -427,16 +502,19 @@ class Guide(Entity):
         return ELASTIC_CLIENT.fetch_entities(
             index_name=self.collection_name, limit=limit or 100, offset=offset or 0
         )
-    
+
     def search(
-        self, query: Dict[str, Any],
+        self,
+        query: Dict[str, Any],
     ):
         try:
             qspec = SearchSchema.model_validate(query).model_dump(mode="json")
         except Exception as e:
             raise DataError(f"Invalid search query: {e}")
 
-        return ELASTIC_CLIENT.search_entities(index_name=self.collection_name, qspec=qspec)
+        return ELASTIC_CLIENT.search_entities(
+            index_name=self.collection_name, qspec=qspec
+        )
 
     def get(self, urn: str) -> Dict[str, Any]:
         entity = ELASTIC_CLIENT.get_entity(index_name=self.collection_name, urn=urn)

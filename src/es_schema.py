@@ -5,12 +5,50 @@ def recipe_collection_index(dim: int):
                 "urn": {"type": "keyword"},
                 "title": {"type": "text"},
                 "description": {"type": "text"},
-                "ingredients": {"type": "nested", "properties": {
-                    "name": {"type": "text"},
-                    "quantity": {"type": "text"}
-                }},
+                "ingredients": {
+                    "type": "nested",
+                    "properties": {
+                        "name": {"type": "text"},
+                        "quantity": {"type": "text"},
+                    },
+                },
                 "instructions": {"type": "text"},
                 "tags": {"type": "keyword"},
+            }
+        }
+    }
+
+
+def artifact_index(dim: int):
+    """
+    Elasticsearch mapping for artifacts. 
+    """
+    return {
+        "mappings": {
+            "properties": {
+                "id": {"type": "keyword"}, 
+                "parent_urn": {"type": "keyword"}, 
+                "type": {"type": "keyword"},
+                # Core metadata
+                "title": {"type": "text", "fields": {"keyword": {"type": "keyword"}}},
+                "description": {
+                    "type": "text"
+                },
+                "creator": {"type": "keyword"},  
+                "language": {"type": "keyword"},
+                # File info
+                "file_url": {"type": "keyword"},
+                "file_s3_url": {"type": "keyword"},
+                "file_type": {"type": "keyword"},
+                "file_size": {"type": "long"},
+                "created_at": {
+                    "type": "date",
+                    "format": "strict_date_optional_time||epoch_millis",
+                },
+                "updated_at": {
+                    "type": "date",
+                    "format": "strict_date_optional_time||epoch_millis",
+                },
             }
         }
     }
@@ -31,7 +69,6 @@ def guide_index(dim: int):
                 "created_at": {"type": "date"},
                 "updated_at": {"type": "date"},
                 "publication_date": {"type": "date"},
-                
                 # User-provided metadata
                 "title": {"type": "text", "fields": {"keyword": {"type": "keyword"}}},
                 "description": {"type": "text"},
@@ -41,13 +78,11 @@ def guide_index(dim: int):
                 "license": {"type": "keyword"},
                 "region": {"type": "keyword"},
                 "language": {"type": "keyword"},
-                
                 # Guide-specific fields
                 "content": {"type": "text"},
                 "topic": {"type": "keyword"},
                 "audience": {"type": "keyword"},
                 "type": {"type": "keyword"},
-                
                 # Nested artifacts
                 "artifacts": {
                     "type": "nested",
@@ -61,12 +96,13 @@ def guide_index(dim: int):
                         "file_size": {"type": "long"},
                         "created_at": {"type": "date"},
                         "updated_at": {"type": "date"},
-                        "type": {"type": "keyword"}
-                    }
-                }
+                        "type": {"type": "keyword"},
+                    },
+                },
             }
         }
     }
+
 
 def policy_index(dim: int):
     return {
@@ -77,10 +113,11 @@ def policy_index(dim: int):
                 "content": {"type": "text"},
                 "authority": {"type": "keyword"},
                 "effective_date": {"type": "date"},
-                "tags": {"type": "keyword"}
+                "tags": {"type": "keyword"},
             }
         }
     }
+
 
 def paper_index(dim: int):
     return {
@@ -97,6 +134,7 @@ def paper_index(dim: int):
         }
     }
 
+
 def foodtable_index(dim: int):
     return {
         "mappings": {
@@ -104,14 +142,16 @@ def foodtable_index(dim: int):
                 "urn": {"type": "keyword"},
                 "name": {"type": "text"},
                 "category": {"type": "keyword"},
-                "nutrients": {"properties": {
-                    "calories": {"type": "float"},
-                    "protein": {"type": "float"},
-                    "carbs": {"type": "float"},
-                    "fat": {"type": "float"}
-                }},
+                "nutrients": {
+                    "properties": {
+                        "calories": {"type": "float"},
+                        "protein": {"type": "float"},
+                        "carbs": {"type": "float"},
+                        "fat": {"type": "float"},
+                    }
+                },
                 "serving_size": {"type": "keyword"},
-                "tags": {"type": "keyword"}
+                "tags": {"type": "keyword"},
             }
         }
     }
@@ -127,10 +167,11 @@ def organization_index(dim: int):
                 "industry": {"type": "keyword"},
                 "image_url": {"type": "keyword"},
                 "location": {"type": "keyword"},
-                "tags": {"type": "keyword"}
+                "tags": {"type": "keyword"},
             }
         }
     }
+
 
 def person_index(dim: int):
     return {
@@ -142,7 +183,7 @@ def person_index(dim: int):
                 "role": {"type": "keyword"},
                 "organization": {"type": "keyword"},
                 "image_url": {"type": "keyword"},
-                "tags": {"type": "keyword"}
+                "tags": {"type": "keyword"},
             }
         }
     }

@@ -75,12 +75,14 @@ api = FastAPI(
 install_error_handler(api)
 
 # import routers
-from routers import core, guides
+from routers import core, guides, artifacts
 
+
+api.include_router(artifacts.router)
 # api.include_router(recipes.router)
 api.include_router(guides.router)
 # api.include_router(policies.router)
-# api.include_router(lineage.router)
+api.include_router(artifacts.router)
 api.include_router(core.router)
 
 if __name__ == "__main__":

@@ -7,6 +7,7 @@ from es_schema import (
     policy_index,
     organization_index,
     person_index,
+    artifact_index,
 )
 from main import config
 from schemas import SearchSchema
@@ -47,6 +48,10 @@ class ElasticsearchClientSingleton:
         if not es.indices.exists(index="policies"):
             es.indices.create(
                 index="policies", body=policy_index(config.settings["ES_DIM"])
+            )
+        if not es.indices.exists(index="artifacts"):
+            es.indices.create(
+                index="artifacts", body=artifact_index(config.settings["ES_DIM"])
             )
         if not es.indices.exists(index="papers"):
             es.indices.create(
@@ -124,7 +129,7 @@ class ElasticsearchClientSingleton:
     def index_entity(self, index_name: str, document: dict):
         client = self.get_client()
         client.index(
-            index=index_name, id=document["urn"], document=document, refresh="wait_for"
+            index=index_name, id=document.get("urn", document.get("id")), document=document, refresh="wait_for"
         )
 
     def delete_entity(self, index_name: str, urn: str):

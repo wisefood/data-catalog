@@ -162,7 +162,7 @@ class Entity:
         """
         entity_type = Entity.resolve_type(urn)
         if entity_type == "guide":
-            GUIDE.get(urn)
+            GUIDE.invalidate_cache(urn)
 
     def get_identifier(self, identifier: str) -> str:
         """
@@ -191,7 +191,7 @@ class Entity:
                 REDIS.set(urn, obj)
             except Exception as e:
                 logging.error(f"Failed to cache entity {urn}: {e}")
-
+    
     def invalidate_cache(self, urn: str) -> None:
         """
         Invalidate the cache for the entity.
@@ -413,9 +413,24 @@ class Artifact(Entity):
         raise NotImplementedError("The Artifact entity does not support listing.")
 
     def fetch(
-        self, limit: Optional[int] = None, offset: Optional[int] = None
+        self, parent_urn: str,
     ) -> List[Dict[str, Any]]:
-        raise NotImplementedError("The Artifact entity does not support fetching.")
+        try:
+            Entity.validate_existence(parent_urn)
+        except NotFoundError:
+            raise NotFoundError(f"Parent entity {parent_urn} not found.")
+
+        qspec = {
+            "limit": 1000,
+            "fq": [f'parent_urn:"{parent_urn}"'] 
+        }
+        
+        response = ELASTIC_CLIENT.search_entities(
+            index_name=self.collection_name, qspec=qspec
+        )
+        
+        # Return just the results list, not the whole dict
+        return response["results"]
 
     def search(
         self,
@@ -449,11 +464,12 @@ class Artifact(Entity):
 
         # Check if the parent entity exists, this will throw NotFoundError if not
         Entity.validate_existence(artifact_data.parent_urn)
+        # Invalidate parent cache since a new artifact is being added
+        self.invalidate_cache(artifact_data.parent_urn)
 
         artifact_data = artifact_data.model_dump(mode="json")
         artifact_data["creator"] = creator["preferred_username"]
         artifact_data = self.upsert_system_fields(artifact_data, update=False)
-        logger.info(f"Creating artifact with data: {artifact_data}")
         try:
             ELASTIC_CLIENT.index_entity(
                 index_name=self.collection_name, document=artifact_data
@@ -520,6 +536,10 @@ class Guide(Entity):
         entity = ELASTIC_CLIENT.get_entity(index_name=self.collection_name, urn=urn)
         if entity is None:
             raise NotFoundError(f"Guide with URN {urn} not found.")
+        else:
+            # Fetch and attach artifacts
+            artifacts = ARTIFACT.fetch(parent_urn=urn)
+            entity["artifacts"] = artifacts
         return entity
 
     def create(self, spec: GuideCreationSchema, creator: dict) -> Dict[str, Any]:

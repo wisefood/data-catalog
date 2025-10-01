@@ -11,6 +11,17 @@ router = APIRouter(prefix="/api/v1/system", tags=["System Operations"])
 def ping(request: Request):
     return "pong"
 
+@router.get("/info")
+@render()
+def info(request: Request):
+    from main import config
+    return {
+        "service": "WiseFood Data Catalog API",
+        "version": "0.0.1",
+        "docs": "/docs",
+        "keycloak": config.settings["KEYCLOAK_EXT_URL"],
+        "minio": config.settings["MINIO_EXT_URL_CONSOLE"],
+    }
 @router.post("/login")
 @render()
 def login(request: Request, creds: LoginSchema):

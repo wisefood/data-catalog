@@ -59,7 +59,7 @@ async def api_upload_artifact(
         raise DataError("File is empty")
     
     # Upload to MinIO and create artifact
-    artifact_data = await ARTIFACT.upload(
+    return ARTIFACT.upload(
         file=file,
         file_content=file_content,
         parent_urn=parent_urn,
@@ -69,8 +69,6 @@ async def api_upload_artifact(
         creator=kutils.current_user(request),
         token=kutils.current_token(request)
     )
-    
-    return artifact_data
 
 @router.patch("/{id}", dependencies=[Depends(auth())])
 @render()

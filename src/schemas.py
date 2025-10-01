@@ -173,6 +173,9 @@ class ArtifactCreationSchema(BaseModel):
     description: Optional[NonEmptyStr] = Field(
         None, description="Summary/abstract of the resource (<= 2000 chars)"
     )
+    language: Union[Iso639_1, None] = Field(
+        default=None, description="Language code (ISO 639-1), e.g., 'en'"
+    )
     file_url: HttpUrl = Field(..., description="URL to download the artifact")
     file_type: str = Field(..., description="MIME type of the artifact (e.g., 'application/pdf')")
     file_size: int = Field(..., ge=0, description="Size of the artifact in bytes")

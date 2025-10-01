@@ -165,7 +165,11 @@ class Entity:
         """
         entity_type = Entity.resolve_type(urn)
         if entity_type == "guide":
-            GUIDE.invalidate_cache(urn)
+            if ELASTIC_CLIENT.get_entity(index_name="guides", urn=urn) is None:
+                raise NotFoundError(f"Guide with URN {urn} not found.")
+        elif entity_type == "artifact":
+            if ELASTIC_CLIENT.get_entity(index_name="artifacts", urn=urn) is None:
+                raise NotFoundError(f"Artifact with URN {urn} not found.")
 
     def get_identifier(self, identifier: str) -> str:
         """
@@ -462,24 +466,27 @@ class Artifact(Entity):
 
         :param spec: The data for the new entity.
         :param creator: The dict of the creator user fetched from header.
+        :param override: If True, skip validation (used for uploads).
         :return: The created entity.
         """
         id = self.create(spec, creator)
         return self.get_entity(id)
 
-    def create(self, spec: BaseModel, creator: dict) -> str:
+    def create(self, spec: BaseModel, creator: dict, override: bool = False) -> str:
         # Validate input data
-        try:
-            artifact_data = self.creation_schema.model_validate(spec)
-        except Exception as e:
-            raise DataError(f"Invalid data for creating artifact: {e}")
-
+        if not override:
+            try:
+                artifact_data = self.creation_schema.model_validate(spec)
+            except Exception as e:
+                raise DataError(f"Invalid data for creating artifact: {e}")
+        else:
+            artifact_data = spec
         # Check if the parent entity exists, this will throw NotFoundError if not
-        Entity.validate_existence(artifact_data.parent_urn)
+        Entity.validate_existence(artifact_data.parent_urn if not override else spec["parent_urn"])
         # Invalidate parent cache since a new artifact is being added
-        self.invalidate_cache(artifact_data.parent_urn)
+        self.invalidate_cache(artifact_data.parent_urn if not override else spec["parent_urn"])
 
-        artifact_data = artifact_data.model_dump(mode="json")
+        artifact_data = artifact_data.model_dump(mode="json") if not override else artifact_data
         artifact_data["creator"] = creator["preferred_username"]
         artifact_data = self.upsert_system_fields(artifact_data, update=False)
         try:
@@ -531,11 +538,8 @@ class Artifact(Entity):
             )
         
         # Validate parent exists
-        try:
-            Entity.validate_existence(parent_urn)
-        except NotFoundError:
-            raise NotFoundError(f"Parent entity {parent_urn} not found.")
-        
+        Entity.validate_existence(parent_urn)
+ 
         # Generate unique filename and ID 
         id = str(uuid.uuid4())
         file_extension = Path(file.filename).suffix.lower()
@@ -582,7 +586,6 @@ class Artifact(Entity):
         artifact_spec = {
             "id": id,
             "parent_urn": parent_urn,
-            "type": "file",
             "title": title or file.filename,
             "description": description,
             "language": language,
@@ -594,7 +597,7 @@ class Artifact(Entity):
         
         # Create artifact entry
         try:
-            artifact_id = self.create(artifact_spec, creator)
+            artifact_id = self.create(artifact_spec, creator, override=True)
             return self.get_entity(artifact_id)
         except Exception as e:
             # Cleanup orphaned file
@@ -674,9 +677,9 @@ class Guide(Entity):
 
         # Check if guide with same URN already exists
         try:
-            existing = self.get_entity(urn=guide_data.urn)
-            if existing is not None:
-                raise ConflictError(f"Guide with URN {guide_data.urn} already exists.")
+            self.validate_existence("urn:guide:" + guide_data.urn)
+
+            raise ConflictError(f"Guide with URN {guide_data.urn} already exists.")
         except NotFoundError:
             pass  # Expected if guide does not exist
 

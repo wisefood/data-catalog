@@ -14,7 +14,7 @@ from jose import JWTError, jwt
 from exceptions import APIException, AuthenticationError, AuthorizationError
 
 # Prefer extracting settings to avoid circular imports:
-from main import config as settings
+from main import config 
 import kutils
 
 # ---------------- Security scheme (shown in Swagger) ----------------
@@ -44,7 +44,7 @@ _JWKS_TTL = 600  # seconds
 
 
 def _jwks_url() -> str:
-    return f"{settings.KEYCLOAK_URL}/realms/{settings.REALM_NAME}/protocol/openid-connect/certs"
+    return f"{config.settings['KEYCLOAK_URL']}/realms/{config.settings['KEYCLOAK_REALM']}/protocol/openid-connect/certs"
 
 
 async def _get_jwks(force: bool = False) -> Dict[str, Any]:
@@ -96,9 +96,9 @@ def get_current_token(
 
 # ---------------- Local JWT verify (with retry on unknown kid) ----------------
 async def api_verify_token(token: str) -> Dict[str, Any]:
-    issuer = settings.KEYCLOAK_ISSUER_URL
+    issuer = config.settings["KEYCLOAK_ISSUER_URL"]
     accepted_audiences: List[str] = list(
-        settings.KEYCLOAK_AUDIENCES or ["master-realm", "account"]
+        config.settings.get("KEYCLOAK_AUDIENCES") or ["master-realm", "account"]
     )
 
     try:
@@ -157,7 +157,7 @@ async def api_verify_token(token: str) -> Dict[str, Any]:
     except Exception as e:
         raise APIException(
             status_code=500,
-            detail="Internal authentication error",
+            detail="Internal server error during token verification",
             code="server/internal",
             extra={"title": "InternalError"},
         ) from e
@@ -177,7 +177,7 @@ def _extract_roles(payload: Dict[str, Any]) -> List[str]:
     realm = payload.get("realm_access") or {}
     roles += realm.get("roles") or []
     resource_access = payload.get("resource_access") or {}
-    client_id = getattr(settings, "KEYCLOAK_CLIENT_ID", None)
+    client_id = getattr(config.settings, "KEYCLOAK_CLIENT_ID", None)
     if client_id and client_id in resource_access:
         roles += resource_access[client_id].get("roles") or []
     else:

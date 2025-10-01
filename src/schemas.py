@@ -40,6 +40,9 @@ Iso3166_1a2 = Annotated[
 SemVer = Annotated[str, StringConstraints(pattern=r"^\d+\.\d+\.\d+$")]
 HexSha256 = Annotated[str, StringConstraints(pattern=r"^[A-Fa-f0-9]{64}$")]
 
+class LoginSchema(BaseModel):
+    username: str = Field(..., description="Username or email")
+    password: str = Field(..., description="Password")
 
 class SearchSchema(BaseModel):
     q: Optional[str] = Field(

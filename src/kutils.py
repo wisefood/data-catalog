@@ -185,6 +185,22 @@ def current_user(request: Request) -> Optional[Dict]:
         return get_user_by_token(token)
     return None
 
+def get_token(username, password):
+    """
+    Returns a token for a user in Keycloak by using username and password.
+
+    Args:
+        username: The username of the user in Keycloak.
+        password: The secret password of the user in Keycloak.
+
+    Returns:
+        dict: The token dictionary containing the access_token and additional details.
+
+    Raises:
+        AuthenticationError: If the token could not be retrieved.
+    """
+    return KEYCLOAK_OPENID_CLIENT().token(username, password)
+
 def get_user_by_token(access_token):
     """
     Introspects the given access token to return the user information if the token is active

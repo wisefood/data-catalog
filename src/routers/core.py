@@ -1,6 +1,8 @@
 from fastapi import APIRouter, Request, Depends 
 from routers.generic import render
 from auth import auth
+from schemas import LoginSchema
+import kutils
 from exceptions import AuthenticationError
 router = APIRouter(prefix="/api/v1/system", tags=["System Operations"])
 
@@ -9,7 +11,7 @@ router = APIRouter(prefix="/api/v1/system", tags=["System Operations"])
 def ping(request: Request):
     return "pong"
 
-@router.get("/error", dependencies=[Depends(auth())])
+@router.post("/login")
 @render()
-def error(request: Request):
-    raise AuthenticationError("This is a test error")
+def login(request: Request, creds: LoginSchema):
+    return kutils.get_token(username=creds.username, password=creds.password)

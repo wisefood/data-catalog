@@ -59,26 +59,22 @@ def raise_keycloak_error(func):
 
             if response_code == 409:
                 raise ConflictError(
-                    message="Conflict: Duplicate resource",
-                    detail={"message": detail_message},
+                    detail=detail_message,
                 ) from e
             elif response_code == 400:
                 raise InvalidError(
-                    message="Bad Request: Invalid data sent to Keycloak",
-                    detail={"message": detail_message},
+                    detail=detail_message,
                 ) from e
             elif response_code == 404:
                 raise NotFoundError(
-                    message="Resource not found in Keycloak",
-                    detail={"message": "Resource not found"},
+                    detail="Resource not found",
                 ) from e
             elif response_code == 401:
                 raise AuthenticationError(
-                    message="Authorization using the provided credentials failed",
-                    detail={"message": "Invalid user credentials"},
+                    detail="Invalid user credentials",
                 ) from e
             else:
-                raise InternalException(message=detail_message) from e
+                raise InternalException(detail=detail_message) from e
 
     return wrapper
 
@@ -126,7 +122,7 @@ def introspect_token(access_token):
     if introspect_response.get("active", False):
         return introspect_response
     else:
-        raise AuthenticationError(message="Token is invalid or expired")
+        raise AuthenticationError(detail="Token is invalid or expired")
 
 
 def introspect_admin_token(access_token):
@@ -142,14 +138,14 @@ def introspect_admin_token(access_token):
     # Optionally check for realm_access if needed
     if not introspect_response.get("realm_access", False):
         raise AuthenticationError(
-            message="Token is missing realm access information",
+            detail="Token is missing realm access information",
         )
 
     # Check if the token has admin privileges.
     is_admin_flag = introspect_response.get("is_admin", None)
     if is_admin_flag is None or not is_admin_flag:
         raise AuthorizationError(
-            message="Bearer Token is not related to an admin user",
+            detail="Bearer Token is not related to an admin user",
         )
 
     return True
@@ -230,7 +226,7 @@ def refresh_access_token(refresh_token):
 
     This function initializes the Keycloak OpenID client and uses the stored refresh token
     to obtain a new access token. If successful, it updates the session with the new
-    access token and refresh token. In case of failure, it returns an appropriate error message.
+    access token and refresh token. In case of failure, it returns an appropriate error detail.
 
     Args:
         - refresh_token: The refresh token to use.
@@ -238,11 +234,11 @@ def refresh_access_token(refresh_token):
     Returns:
         tuple: A tuple containing:
             - str or None: The refreshed access token if successful, otherwise None.
-            - str or None: An error message if the refresh fails, otherwise None.
+            - str or None: An error detail if the refresh fails, otherwise None.
     """
 
     if not refresh_token:
-        raise InvalidError(message="Missing refresh token.")
+        raise InvalidError(detail="Missing refresh token.")
 
     token = KEYCLOAK_OPENID_CLIENT().refresh_token(
         refresh_token, grant_type="refresh_token"

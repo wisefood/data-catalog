@@ -1,10 +1,10 @@
 from fastapi import APIRouter, Request, Depends
-from schemas import GuideCreationSchema, GuideUpdateSchema
+from schemas import GuideCreationSchema, GuideUpdateSchema, SearchSchema
 from routers.generic import render
 import kutils
 from auth import auth
 from entity import GUIDE
-router = APIRouter(prefix="/api/v1/guides", tags=["Nutritional Guide Operations"])
+router = APIRouter(prefix="/api/v1/guides", tags=["Dietary Guides Operations"])
 
 
 @router.get("/", )
@@ -17,6 +17,11 @@ def api_list_guides(request: Request, limit: int = 100, offset: int = 0):
 def api_fetch_guides(request: Request, limit: int = 100, offset: int = 0):
     return GUIDE.fetch_entities(limit=limit, offset=offset)
 
+@router.post("/search", )
+@render()
+def api_search_guides(request: Request, q: SearchSchema):
+    return GUIDE.search_entities(query=q)
+
 @router.get("/{urn}")
 @render()
 def api_get_guide(request: Request, urn: str):
@@ -25,7 +30,7 @@ def api_get_guide(request: Request, urn: str):
 @router.post("/", )
 @render()
 def api_create_guide(request: Request, g: GuideCreationSchema):
-    return GUIDE.create_entity(g.model_dump(mode="json"))
+    return GUIDE.create_entity(g.model_dump(mode="json"), creator=kutils.current_user(request))
 
 @router.patch("/{urn}")
 @render()

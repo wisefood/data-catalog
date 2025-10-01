@@ -22,7 +22,7 @@ from exceptions import (
     ConflictError,
 )
 import logging
-from schemas import GuideCreationSchema, GuideUpdateSchema, GuideSchema
+from schemas import GuideCreationSchema, GuideUpdateSchema, GuideSchema, SearchSchema
 
 
 class Entity:
@@ -137,7 +137,7 @@ class Entity:
         :return: The URN of the entity.
         """
         if is_valid_uuid(identifier):
-            return f"urn:{self.name}:{identifier}"
+            return self.resolve_urn(identifier)
         elif identifier.startswith(f"urn:{self.name}:"):
             return identifier
         else:
@@ -167,6 +167,23 @@ class Entity:
             except Exception as e:
                 logging.error(f"Failed to invalidate cache for entity {urn}: {e}")
 
+    def resolve_urn(self, uuid: str) -> str:
+        """
+        Resolve the URN of an entity given its UUID.
+        :param uuid: The UUID of the entity.
+        :return: The URN of the entity.
+        """
+        try:
+            qspec = {"query": {"term": {"id": uuid}}}
+            entity = ELASTIC_CLIENT.search_entities(
+                index_name=self.collection_name, qspec=qspec
+            )
+            if not entity:
+                raise NotFoundError(f"Guide with UUID {uuid} not found.")
+            return entity[0]["urn"]
+        except Exception as e:
+            raise NotFoundError(f"Failed to resolve URN for UUID {uuid}: {e}")
+
     def get_cached(self, urn: str) -> Optional[Dict[str, Any]]:
         obj = None
         if config.settings.get("CACHE_ENABLED", False):
@@ -174,11 +191,11 @@ class Entity:
                 obj = REDIS.get(urn)
             except Exception as e:
                 logging.error(f"Failed to get cached entity {urn}: {e}")
-        
+
         if obj is None:
             obj = self.get(urn)
             self.cache(urn, obj)
-    
+
         return self.dump_schema.model_validate(obj).model_dump(mode="json")
 
     def get_entity(self, urn: str) -> Dict[str, Any]:
@@ -277,7 +294,8 @@ class Entity:
         )
 
     def search_entities(
-        self, query: str, limit: Optional[int] = None, offset: Optional[int] = None
+        self,
+        query: Dict[str, Any],
     ) -> List[Dict[str, Any]]:
         """
         Search for entities bundler method.
@@ -287,10 +305,11 @@ class Entity:
         :param offset: The number of entities to skip before starting to collect the result set.
         :return: A list of entities matching the search query.
         """
-        return self.search(query=query, limit=limit, offset=offset)
+        return self.search(query=query)
 
     def search(
-        self, query: str, limit: Optional[int] = None, offset: Optional[int] = None
+        self,
+        query: Dict[str, Any],
     ) -> List[Dict[str, Any]]:
         """
         Search for entities.
@@ -335,21 +354,31 @@ class Guide(Entity):
         self, limit: Optional[int] = None, offset: Optional[int] = None
     ) -> List[str]:
         return ELASTIC_CLIENT.list_entities(
-            index_name="guides", size=limit or 100, offset=offset or 0
+            index_name=self.collection_name, size=limit or 100, offset=offset or 0
         )
 
     def fetch(
         self, limit: Optional[int] = None, offset: Optional[int] = None
     ) -> List[Dict[str, Any]]:
         return ELASTIC_CLIENT.fetch_entities(
-            index_name="guides", limit=limit or 100, offset=offset or 0
+            index_name=self.collection_name, limit=limit or 100, offset=offset or 0
         )
+    
+    def search(
+        self, query: Dict[str, Any],
+    ):
+        try:
+            qspec = SearchSchema.model_validate(query).model_dump(mode="json")
+        except Exception as e:
+            raise DataError(f"Invalid search query: {e}")
+
+        return ELASTIC_CLIENT.search_entities(index_name=self.collection_name, qspec=qspec)
 
     def get(self, urn: str) -> Dict[str, Any]:
-        entity = ELASTIC_CLIENT.get_entity(index_name="guides", urn=urn)
+        entity = ELASTIC_CLIENT.get_entity(index_name=self.collection_name, urn=urn)
         if entity is None:
             raise NotFoundError(f"Guide with URN {urn} not found.")
-        return entity 
+        return entity
 
     def create(self, spec: GuideCreationSchema, creator: dict) -> Dict[str, Any]:
         # Validate input data
@@ -371,12 +400,13 @@ class Guide(Entity):
         guide_dict["creator"] = creator["preferred_username"]
         guide_dict = self.upsert_system_fields(guide_dict, update=False)
         try:
-            ELASTIC_CLIENT.index_entity(index_name="guides", document=guide_dict)
+            ELASTIC_CLIENT.index_entity(
+                index_name=self.collection_name, document=guide_dict
+            )
         except Exception as e:
             raise InternalError(f"Failed to create guide: {e}")
 
     def patch(self, urn, spec):
-        # Validate input data
         try:
             guide_data = self.update_schema.model_validate(spec)
         except Exception as e:
@@ -395,17 +425,20 @@ class Guide(Entity):
         guide_dict = self.upsert_system_fields(guide_dict, update=True)
         guide_dict["urn"] = urn
         try:
-            ELASTIC_CLIENT.update_entity(index_name="guides", document=guide_dict)
+            ELASTIC_CLIENT.update_entity(
+                index_name=self.collection_name, document=guide_dict
+            )
         except Exception as e:
             raise InternalError(f"Failed to update guide: {e}")
-        
-    def delete(self, urn: str) -> bool:    
+
+    def delete(self, urn: str) -> bool:
         # Permanently delete the guide
         try:
-            ELASTIC_CLIENT.delete_entity(index_name="guides", urn=urn)
+            ELASTIC_CLIENT.delete_entity(index_name=self.collection_name, urn=urn)
         except Exception as e:
             raise InternalError(f"Failed to delete guide: {e}")
-        
+
         return {"deleted": urn}
-    
+
+
 GUIDE = Guide()

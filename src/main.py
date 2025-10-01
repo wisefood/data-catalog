@@ -16,6 +16,7 @@ class Config:
         self.settings["PORT"] = int(os.getenv("PORT", 8000))
         self.settings["DEBUG"] = os.getenv("DEBUG", "true").lower() == "true"
         self.settings["CONTEXT_PATH"] = os.getenv("CONTEXT_PATH", "")
+        self.settings["APP_EXT_DOMAIN"] = os.getenv("APP_EXT_DOMAIN", "http://catalog.wisefood.gr")
         self.settings["ELASTIC_HOST"] = os.getenv(
             "ELASTIC_HOST", "http://elasticsearch:9200"
         )
@@ -33,6 +34,7 @@ class Config:
         self.settings["MINIO_EXT_URL_API"] = os.getenv(
             "MINIO_EXT_URL_API", "https://s3.wisefood.gr"
         )
+        self.settings["MINIO_BUCKET"] = os.getenv("MINIO_BUCKET", "catalog")
         self.settings["KEYCLOAK_URL"] = os.getenv(
             "KEYCLOAK_URL", "http://keycloak:8080"
         )

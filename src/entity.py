@@ -10,7 +10,10 @@ from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
 from backend.redis import REDIS
 from backend.elastic import ELASTIC_CLIENT
-from backend.minio import MINIO
+from backend.minio import MINIO_CLIENT
+from pathlib import Path
+from minio.error import S3Error
+from io import BytesIO
 from datetime import datetime
 from utils import is_valid_uuid
 from main import config
@@ -372,7 +375,7 @@ class Entity:
             spec["urn"] = f"urn:{self.name}:{spec['urn'].split(':')[-1]}"
             spec["id"] = str(uuid.uuid4())
 
-        if not update and self.name == "artifact":
+        if not update and self.name == "artifact" and "id" not in spec:
             spec["id"] = str(uuid.uuid4())
 
         if update and "creator" in spec:
@@ -398,6 +401,8 @@ class Entity:
 #
 # -----------------------------------
 class Artifact(Entity):
+   
+
     def __init__(self):
         super().__init__(
             "artifact",
@@ -406,6 +411,8 @@ class Artifact(Entity):
             ArtifactCreationSchema,
             ArtifactUpdateSchema,
         )
+        self.BUCKET_NAME = config.settings.get("MINIO_BUCKET")
+        self.MAX_FILE_SIZE = 1_073_741_824
 
     def list(
         self, limit: Optional[int] = None, offset: Optional[int] = None
@@ -432,11 +439,16 @@ class Artifact(Entity):
         # Return just the results list, not the whole dict
         return response["results"]
 
-    def search(
-        self,
-        query: Dict[str, Any],
-    ):
-        raise NotAllowedError("The Artifact entity does not support searching.")
+    def search(self, query: Dict[str, Any]):
+        """
+        Searching artifacts is not supported as they are dependent on parent entities.
+        Use fetch() with a parent_urn instead.
+        """
+        raise NotAllowedError(
+            "The Artifact entity does not support searching. "
+            "Use fetch(parent_urn) to retrieve artifacts for a specific parent."
+        )
+
 
     def get(self, urn: str) -> Dict[str, Any]:
         entity = ELASTIC_CLIENT.get_entity(index_name=self.collection_name, urn=urn)
@@ -479,8 +491,120 @@ class Artifact(Entity):
 
         return artifact_data["id"]
     
-    def upload(self, file) -> Dict[str, Any]:
-        return
+    def upload(
+        self,
+        file,  # UploadFile from FastAPI
+        file_content: bytes,
+        parent_urn: str,
+        title: Optional[str],
+        description: Optional[str],
+        language: Optional[str],
+        creator: dict,
+        token: str,
+    ) -> Dict[str, Any]:
+        """
+        Upload a file to MinIO and create an artifact entry.
+        
+        :param file: UploadFile from FastAPI
+        :param file_content: File content as bytes
+        :param parent_urn: URN of the parent entity
+        :param title: Optional title (defaults to filename)
+        :param description: Optional description
+        :param language: Optional language code
+        :param creator: Creator user dict from request
+        :param token: JWT token for personalized MinIO client
+        :return: Created artifact document
+        :raises DataError: If file validation fails
+        :raises NotFoundError: If parent entity doesn't exist
+        :raises InternalError: If upload or creation fails
+        """
+        # Validate file size
+        file_size = len(file_content)
+        
+        if file_size == 0:
+            raise DataError("Cannot upload empty file")
+            
+        if file_size > self.MAX_FILE_SIZE:
+            raise DataError(
+                f"File size ({file_size:,} bytes) exceeds maximum allowed "
+                f"size of {self.MAX_FILE_SIZE:,} bytes (1GB)"
+            )
+        
+        # Validate parent exists
+        try:
+            Entity.validate_existence(parent_urn)
+        except NotFoundError:
+            raise NotFoundError(f"Parent entity {parent_urn} not found.")
+        
+        # Generate unique filename and ID 
+        id = str(uuid.uuid4())
+        file_extension = Path(file.filename).suffix.lower()
+        unique_filename = f"{id}{file_extension}"
+        
+        # Determine content type
+        content_type = file.content_type or "application/octet-stream"
+        
+        # Get personalized MinIO client
+        try:
+            minio_client = MINIO_CLIENT
+        except Exception as e:
+            logger.error(f"Failed to get personalized MinIO client: {e}")
+            raise InternalError(f"Failed to authenticate with storage service: {e}")
+        
+        # Create organized object path
+        # Format: parent_type/parent_id/filename
+        parent_parts = parent_urn.split(":")
+        if len(parent_parts) >= 3:
+            object_name = f"{parent_parts[1]}/{parent_parts[2]}/{unique_filename}"
+        else:
+            object_name = f"artifacts/{unique_filename}"
+        
+        # Upload file to MinIO
+        try:
+            minio_client.put_object(
+                bucket_name=self.BUCKET_NAME,
+                object_name=object_name,
+                data=BytesIO(file_content),
+                length=file_size,
+                content_type=content_type,
+            )
+            logger.info(
+                f"Uploaded file to MinIO: {self.BUCKET_NAME}/{object_name} "
+                f"({file_size:,} bytes)"
+            )
+        except S3Error as e:
+            logger.error(f"Failed to upload file to MinIO: {e}")
+            raise InternalError(f"Failed to upload file to storage: {e}")
+        
+        # Generate file URLs
+        file_url = config.settings.get("APP_EXT_DOMAIN") + config.settings.get("CONTEXT_PATH") + f"/api/v1/artifacts/{id}/download"
+        file_s3_url = f"s3://{self.BUCKET_NAME}/{object_name}"
+        
+        # Create artifact metadata
+        artifact_spec = {
+            "id": id,
+            "parent_urn": parent_urn,
+            "type": "file",
+            "title": title or file.filename,
+            "description": description,
+            "language": language,
+            "file_url": file_url,
+            "file_s3_url": file_s3_url,
+            "file_type": content_type,
+            "file_size": file_size,
+        }
+        
+        # Create artifact entry
+        try:
+            artifact_id = self.create(artifact_spec, creator)
+            return self.get_entity(artifact_id)
+        except Exception as e:
+            try:
+                minio_client.remove_object(self.BUCKET_NAME, object_name)
+                logger.warning(f"Cleaned up orphaned file {object_name} after failed artifact creation")
+            except Exception as cleanup_error:
+                logger.error(f"Failed to clean up file after error: {cleanup_error}")
+            raise
 
     def patch(self, urn, spec):
         raise NotImplementedError("The Artifact entity does not support updating.")

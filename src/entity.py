@@ -343,6 +343,70 @@ class Entity:
             spec["created_at"] = str(datetime.now().isoformat())
         return spec
 
+#-----------------------------------
+#
+#  *** Artifact Entity ***
+#  The artifact entity is currently 
+#  hosts all features related to 
+#  linking resources under a catalog
+#  entity. It is not considered 
+#  a standalone entity and its 
+#  existence is tied to the
+#  existence of the parent entity.
+#  
+#-----------------------------------
+class Artifact(Entity):
+    def __init__(self):
+        super().__init__(
+            "artifact", "artifacts", BaseModel, BaseModel, None
+        )
+
+    def list(
+        self, limit: Optional[int] = None, offset: Optional[int] = None
+    ) -> List[str]:
+        raise NotImplementedError(
+            "The Artifact entity does not support listing."
+        )
+
+    def fetch(
+        self, limit: Optional[int] = None, offset: Optional[int] = None
+    ) -> List[Dict[str, Any]]:
+        raise NotImplementedError(
+            "The Artifact entity does not support fetching."
+        )
+
+    def search(
+        self, query: Dict[str, Any],
+    ):
+        raise NotImplementedError(
+            "The Artifact entity does not support searching."
+        )
+
+    def get(self, urn: str) -> Dict[str, Any]:
+        raise NotImplementedError(
+            "The Artifact entity does not support getting."
+        )
+
+    def create(self, spec: BaseModel, creator: dict) -> Dict[str, Any]:
+        raise NotImplementedError(
+            "The Artifact entity does not support creating."
+        )
+
+    def patch(self, urn, spec):
+        raise NotImplementedError(
+            "The Artifact entity does not support updating."
+        )
+
+    def delete(self, urn: str) -> bool:
+        raise NotImplementedError(
+            "The Artifact entity does not support deleting."
+        )
+
+#-----------------------------------
+#
+#  Dietary Guide Entity
+#  
+#-----------------------------------
 
 class Guide(Entity):
     def __init__(self):

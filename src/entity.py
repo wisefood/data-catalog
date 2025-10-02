@@ -498,6 +498,48 @@ class Artifact(Entity):
 
         return artifact_data["id"]
     
+    def download(self, id: str):
+        """
+        Download the file associated with the artifact.
+
+        :param id: The ID of the artifact.
+        :return: Tuple of (file_content, filename, content_type)
+        """
+        artifact = self.get_entity(id)
+        if artifact is None:
+            raise NotFoundError(f"Artifact with ID {id} not found.")
+
+        try:
+            minio_client = MINIO_CLIENT()
+        except Exception as e:
+            logger.error(f"Failed to get MinIO client: {e}")
+            raise InternalError(f"Failed to initialize storage client: {e}")
+
+        # Extract bucket and object name from file_s3_url
+        try:
+            s3_url = artifact.get("file_s3_url")
+            if not s3_url or not s3_url.startswith("s3://"):
+                raise DataError(f"Invalid S3 URL for artifact {id}.")
+            parts = s3_url[5:].split("/", 1)
+            bucket_name = parts[0]
+            object_name = parts[1] if len(parts) > 1 else ""
+        except Exception as e:
+            raise DataError(f"Failed to parse S3 URL for artifact {id}: {e}")
+
+        try:
+            response = minio_client.get_object(bucket_name, object_name)
+            # Don't read() or close() - return the response object directly
+            
+            filename = artifact.get("filename", object_name.split("/")[-1])
+            content_type = artifact.get("content_type", "application/octet-stream")
+            
+            return response, filename, content_type
+            
+        except S3Error as e:
+            logger.error(f"Failed to download file from MinIO: {e}")
+            raise InternalError(f"Failed to download file from storage: {e}")
+        
+        
     def upload(
         self,
         file,  # UploadFile from FastAPI

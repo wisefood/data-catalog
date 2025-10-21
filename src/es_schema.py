@@ -18,6 +18,30 @@ def recipe_collection_index(dim: int):
         }
     }
 
+def organization_index(dim: int):
+    return {
+        "mappings": {
+            "properties": {
+                "urn": {"type": "keyword"},
+                "id": {"type": "keyword"},
+                "title": {"type": "text", "fields": {"keyword": {"type": "keyword"}}},
+                "description": {"type": "text"},
+                "url": {"type": "keyword"},
+                "contact_email": {"type": "keyword"},
+                "image_url": {"type": "keyword"},
+                "created_at": {
+                    "type": "date",
+                    "format": "strict_date_optional_time||epoch_millis",
+                },
+                "status": {"type": "keyword"},
+                "updated_at": {
+                    "type": "date", 
+                    "format": "strict_date_optional_time||epoch_millis",
+                },
+                "type": {"type": "keyword"},
+            }
+        }
+    }
 
 def artifact_index(dim: int):
     """
@@ -69,6 +93,7 @@ def guide_index(dim: int):
                 "created_at": {"type": "date"},
                 "updated_at": {"type": "date"},
                 "publication_date": {"type": "date"},
+                # TODO: Add publishing organization
                 # User-provided metadata
                 "title": {"type": "text", "fields": {"keyword": {"type": "keyword"}}},
                 "description": {"type": "text"},
@@ -103,7 +128,8 @@ def guide_index(dim: int):
         }
     }
 
-
+# TODO: Delete in future versions
+# Validate if should exist or not
 def policy_index(dim: int):
     return {
         "mappings": {
@@ -118,7 +144,7 @@ def policy_index(dim: int):
         }
     }
 
-
+# TODO: Rename to article_index
 def paper_index(dim: int):
     return {
         "mappings": {
@@ -128,29 +154,39 @@ def paper_index(dim: int):
                 "abstract": {"type": "text"},
                 "authors": {"type": "keyword"},
                 "publication_date": {"type": "date"},
+                "content": {"type": "text"},
                 "journal": {"type": "keyword"},
                 "tags": {"type": "keyword"},
             }
         }
     }
 
-
 def foodtable_index(dim: int):
     return {
         "mappings": {
             "properties": {
                 "urn": {"type": "keyword"},
-                "name": {"type": "text"},
+                "title": {"type": "text"},
                 "category": {"type": "keyword"},
-                "nutrients": {
+                "language": {"type": "keyword"},
+                "region": {"type": "keyword"},
+                "description": {"type": "text"},
+                "nutritional_mappings": {
+                    "type": "nested",
                     "properties": {
+                        "name": {"type": "text"},
+                        "amount": {"type": "float"},
+                        "serving_size": {"type": "keyword"},
                         "calories": {"type": "float"},
                         "protein": {"type": "float"},
                         "carbs": {"type": "float"},
                         "fat": {"type": "float"},
+                        "fiber": {"type": "float"},
+                        "sugar": {"type": "float"},
+                        "sodium": {"type": "float"},
+                        "vitamins": {"type": "object"},
                     }
                 },
-                "serving_size": {"type": "keyword"},
                 "tags": {"type": "keyword"},
             }
         }

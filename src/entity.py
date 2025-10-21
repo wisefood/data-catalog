@@ -156,6 +156,9 @@ class Entity:
         elif entity_type == "artifact":
             if ELASTIC_CLIENT.get_entity(index_name="artifacts", urn=urn) is None:
                 raise NotFoundError(f"Artifact with URN {urn} not found.")
+        elif entity_type == "organization":
+            if ELASTIC_CLIENT.get_entity(index_name="organizations", urn=urn) is None:
+                raise NotFoundError(f"Organization with URN {urn} not found.")
 
     def get_identifier(self, identifier: str) -> str:
         """
@@ -204,12 +207,12 @@ class Entity:
         :return: The URN of the entity.
         """
         try:
-            qspec = {"query": {"term": {"id": uuid}}}
+            qspec = {"fq": [{"id": uuid}]}
             entity = ELASTIC_CLIENT.search_entities(
                 index_name=self.collection_name, qspec=qspec
             )
             if not entity:
-                raise NotFoundError(f"Guide with UUID {uuid} not found.")
+                raise NotFoundError(f"Entity with UUID {uuid} not found.")
             return entity[0]["urn"]
         except Exception as e:
             raise NotFoundError(f"Failed to resolve URN for UUID {uuid}: {e}")

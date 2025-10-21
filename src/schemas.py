@@ -309,3 +309,55 @@ class GuideUpdateSchema(BaseModel):
         if all(getattr(self, field) is None for field in self.model_fields):
             raise ValueError("At least one field must be provided for update")
         return self
+    
+class OrganizationSchema(BaseSchema):
+    urn: UrnStr = Field(
+        ..., description="Stable URN identifier, e.g., 'urn:organizations:fao-org'"
+    )
+    id: NonEmptyStr = Field(..., description="Unique identifier for the organization")
+    title: NonEmptyStr = Field(..., description="Human-readable organization name")
+    description: NonEmptyStr = Field(
+        ..., description="Summary/abstract of the organization (<= 2000 chars)"
+    )
+    url: HttpUrl = Field(..., description="Canonical public URL to the organization")
+    contact_email: EmailStr = Field(..., description="Contact email address")
+    image_url: Optional[HttpUrl] = Field(
+        None, description="URL to the organization's logo/image"
+    ) 
+    created_at: datetime = Field(..., description="Creation timestamp (UTC)")
+    updated_at: datetime = Field(..., description="Last-modified timestamp (UTC)")
+    type: Literal["organization"] = Field(
+        default="organization", description="Resource type discriminator", exclude=True
+    )
+
+class OrganizationCreationSchema(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+        str_strip_whitespace=True,
+        use_enum_values=True,
+    )
+    urn: SlugStr = Field(
+        ..., description="URN slug (e.g., 'switzerland_calcium_intake_guide')"
+    )
+    status: Status = Field(default=Status.active, description="Lifecycle status")
+    title: NonEmptyStr = Field(..., description="Human-readable organization name")
+    description: NonEmptyStr = Field(
+        ..., description="Summary/abstract of the organization (<= 2000 chars)"
+    )
+    url: HttpUrl = Field(..., description="Canonical public URL to the organization")
+    contact_email: EmailStr = Field(..., description="Contact email address")
+    image_url: Optional[HttpUrl] = Field(
+        None, description="URL to the organization's logo/image"
+    )
+
+class OrganizationUpdateSchema(BaseModel):
+    title: NonEmptyStr = Field(..., description="Human-readable organization name")
+    description: NonEmptyStr = Field(
+        ..., description="Summary/abstract of the organization (<= 2000 chars)"
+    )
+    status: Status = Field(default=Status.active, description="Lifecycle status")
+    url: HttpUrl = Field(..., description="Canonical public URL to the organization")
+    contact_email: EmailStr = Field(..., description="Contact email address")
+    image_url: Optional[HttpUrl] = Field(
+        None, description="URL to the organization's logo/image"
+    )

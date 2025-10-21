@@ -4,7 +4,7 @@ from routers.generic import render
 from schemas import ArtifactCreationSchema, ArtifactUpdateSchema
 import kutils
 from exceptions import DataError
-from entity import ARTIFACT
+from entities.artifacts import ARTIFACT
 from auth import auth
 import logging
 

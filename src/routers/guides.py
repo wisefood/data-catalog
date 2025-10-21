@@ -3,7 +3,7 @@ from schemas import GuideCreationSchema, GuideUpdateSchema, SearchSchema
 from routers.generic import render
 import kutils
 from auth import auth
-from entity import GUIDE
+from entities.guides import GUIDE
 
 router = APIRouter(prefix="/api/v1/guides", tags=["Dietary Guides Operations"])
 

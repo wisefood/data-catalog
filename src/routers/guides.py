@@ -9,7 +9,7 @@ router = APIRouter(prefix="/api/v1/guides", tags=["Dietary Guides Operations"])
 
 
 @router.get(
-    "/",
+    "",
     dependencies=[Depends(auth())],
     summary="List dietary guides",
     description="Retrieve a paginated list of dietary guides from the database."
@@ -53,7 +53,7 @@ def api_get_guide(request: Request, urn: str):
 
 
 @router.post(
-    "/",
+    "",
     dependencies=[Depends(auth())],
     summary="Create dietary guide",
     description="Create a new dietary guide with the provided information."

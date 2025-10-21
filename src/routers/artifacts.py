@@ -43,7 +43,7 @@ def api_download_artifact(request: Request, id: str):
 
 
 @router.post(
-    "/",
+    "",
     dependencies=[Depends(auth())],
     summary="Create a new artifact",
     description="Create a new artifact in the system using the provided data.",

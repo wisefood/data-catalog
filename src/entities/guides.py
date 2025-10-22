@@ -1,8 +1,14 @@
-# -----------------------------------
-#
-#  Dietary Guide Entity
-#
-# -----------------------------------
+"""
+Guide Entity
+------------------
+The Guide entity inherits from the base Entity class and provides
+methods to manage dietary guide data, including retrieval, creation,
+updating, and deletion of dietary guides. Collection operations such as
+LIST, FETCH and SEARCH are implemented in the parent class. This class 
+consolidates and applies schemas specific to dietary guides for data validation
+and serialization. It implements the CRUD operations while leveraging
+the underlying infrastructure provided by the Entity base class.
+"""
 from typing import Optional, List, Dict, Any
 from backend.elastic import ELASTIC_CLIENT
 from exceptions import (
@@ -29,33 +35,6 @@ class Guide(Entity):
     def __init__(self):
         super().__init__(
             "guide", "guides", GuideSchema, GuideCreationSchema, GuideUpdateSchema
-        )
-
-    def list(
-        self, limit: Optional[int] = None, offset: Optional[int] = None
-    ) -> List[str]:
-        return ELASTIC_CLIENT.list_entities(
-            index_name=self.collection_name, size=limit or 100, offset=offset or 0
-        )
-
-    def fetch(
-        self, limit: Optional[int] = None, offset: Optional[int] = None
-    ) -> List[Dict[str, Any]]:
-        return ELASTIC_CLIENT.fetch_entities(
-            index_name=self.collection_name, limit=limit or 100, offset=offset or 0
-        )
-
-    def search(
-        self,
-        query: Dict[str, Any],
-    ):
-        try:
-            qspec = SearchSchema.model_validate(query).model_dump(mode="json")
-        except Exception as e:
-            raise DataError(f"Invalid search query: {e}")
-
-        return ELASTIC_CLIENT.search_entities(
-            index_name=self.collection_name, qspec=qspec
         )
 
     def get(self, urn: str) -> Dict[str, Any]:
@@ -94,7 +73,7 @@ class Guide(Entity):
         except Exception as e:
             raise InternalError(f"Failed to create guide: {e}")
 
-    def patch(self, urn, spec):
+    def patch(self, urn: str, spec: GuideUpdateSchema):
         """Partially update an existing guide."""
         try:
             guide_data = self.update_schema.model_validate(spec)

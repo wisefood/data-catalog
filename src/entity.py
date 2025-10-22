@@ -11,6 +11,7 @@ from typing import Optional, List, Dict, Any
 from backend.redis import REDIS
 from backend.elastic import ELASTIC_CLIENT
 from datetime import datetime
+from schemas import SearchSchema
 from utils import is_valid_uuid
 from main import config
 import uuid
@@ -98,8 +99,8 @@ class Entity:
         :param offset: The number of entities to skip before starting to collect the result set.
         :return: A list of entities.
         """
-        raise NotImplementedError(
-            "Subclasses of the Entity class must implement this method."
+        return ELASTIC_CLIENT.fetch_entities(
+            index_name=self.collection_name, limit=limit or 100, offset=offset or 0
         )
 
     def list_entities(
@@ -124,8 +125,8 @@ class Entity:
         :param offset: The number of entities to skip before starting to collect the result set.
         :return: A list of URNs.
         """
-        raise NotImplementedError(
-            "Subclasses of the Entity class must implement this method."
+        return ELASTIC_CLIENT.list_entities(
+            index_name=self.collection_name, size=limit or 100, offset=offset or 0
         )
 
     @staticmethod
@@ -352,9 +353,15 @@ class Entity:
         :param offset: The number of entities to skip before starting to collect the result set.
         :return: A list of entities matching the search query.
         """
-        raise NotImplementedError(
-            "Subclasses of the Entity class must implement this method."
+        try:
+            qspec = SearchSchema.model_validate(query).model_dump(mode="json")
+        except Exception as e:
+            raise DataError(f"Invalid search query: {e}")
+
+        return ELASTIC_CLIENT.search_entities(
+            index_name=self.collection_name, qspec=qspec
         )
+
 
     def upsert_system_fields(self, spec: Dict, update=False) -> Dict[str, Any]:
         """

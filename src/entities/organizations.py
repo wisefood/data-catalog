@@ -1,8 +1,14 @@
-# -----------------------------------
-#
-#  Organization Entity
-#
-# -----------------------------------
+"""
+Organization Entity
+------------------
+The Organization entity inherits from the base Entity class and provides
+methods to manage organization data, including retrieval, creation,
+updating, and deletion of organizations. Collection operations such as
+LIST, FETCH and SEARCH are implemented in the parent class. This class 
+consolidates and applies schemas specific to organizations for data validation
+and serialization. It implements the CRUD operations while leveraging
+the underlying infrastructure provided by the Entity base class.
+"""
 from typing import Optional, List, Dict, Any
 from backend.elastic import ELASTIC_CLIENT
 from exceptions import (
@@ -65,22 +71,6 @@ class Organization(Entity):
         except Exception as e:
             raise InternalError(f"Failed to create organization: {e}")
 
-    def list(
-        self, limit: Optional[int] = None, offset: Optional[int] = None
-    ) -> List[str]:
-        """List organizations with pagination."""
-        return ELASTIC_CLIENT.list_entities(
-            index_name=self.collection_name, size=limit or 100, offset=offset or 0
-        )
-
-    def fetch(
-        self, limit: Optional[int] = None, offset: Optional[int] = None
-    ) -> List[Dict[str, Any]]:
-        """Fetch organizations with detailed information and pagination."""
-        return ELASTIC_CLIENT.fetch_entities(
-            index_name=self.collection_name, limit=limit or 100, offset=offset or 0
-        )
-
     def patch(self, urn: str, spec: OrganizationUpdateSchema) -> Dict[str, Any]:
         """Partially update an existing organization."""
         try:
@@ -104,17 +94,6 @@ class Organization(Entity):
             )
         except Exception as e:
             raise InternalError(f"Failed to update organization: {e}")
-
-    def search(self, query: Dict[str, Any]):
-        """Search for organizations based on query parameters."""
-        try:
-            qspec = SearchSchema.model_validate(query).model_dump(mode="json")
-        except Exception as e:
-            raise DataError(f"Invalid search query: {e}")
-
-        return ELASTIC_CLIENT.search_entities(
-            index_name=self.collection_name, qspec=qspec
-        )
 
     def delete(self):
         raise NotImplementedError("Organization deletion is not supported.")

@@ -198,6 +198,10 @@ def _to_simple_response(request: Request, exc: APIException):
         },
         "help": str(request.url),
     }
+
+    if getattr(exc, "errors", None):
+        body["error"]["errors"] = exc.errors
+        
     from fastapi.responses import JSONResponse
     return JSONResponse(
         body,

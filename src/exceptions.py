@@ -29,7 +29,7 @@ class APIException(HTTPException):
     ) -> None:
         super().__init__(status_code=status_code, detail=detail, headers=headers or {})
         self.code = code
-        self.errors = errors
+        self.errors = errors or []
         self.extra = extra or {}
         self.instance = instance or f"urn:uuid:{uuid.uuid4()}"
         self.timestamp = datetime.now(timezone.utc).isoformat()
@@ -87,7 +87,6 @@ class InvalidError(APIException):
         super().__init__(400, detail, code="request/invalid", **kw)
 
 class DataError(APIException):
-    # 422 is the proper status for semantically invalid content
     def __init__(self, detail: str = "Unprocessable Entity", errors: Any = None, **kw):
         super().__init__(422, detail, code="request/unprocessable", errors=errors, **kw)
 

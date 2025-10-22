@@ -303,14 +303,8 @@ class GuideUpdateSchema(BaseModel):
         if v is not None and len(set(map(str.lower, v))) != len(v):
             raise ValueError("tags must be unique (case-insensitive)")
         return v
-
-    @model_validator(mode="after")
-    def at_least_one_field(self):
-        if all(getattr(self, field) is None for field in self.model_fields):
-            raise ValueError("At least one field must be provided for update")
-        return self
     
-class OrganizationSchema(BaseSchema):
+class OrganizationSchema(BaseModel):
     urn: UrnStr = Field(
         ..., description="Stable URN identifier, e.g., 'urn:organizations:fao-org'"
     )
@@ -351,13 +345,15 @@ class OrganizationCreationSchema(BaseModel):
     )
 
 class OrganizationUpdateSchema(BaseModel):
-    title: NonEmptyStr = Field(..., description="Human-readable organization name")
-    description: NonEmptyStr = Field(
-        ..., description="Summary/abstract of the organization (<= 2000 chars)"
+    model_config = ConfigDict(
+        extra="forbid",
+        str_strip_whitespace=True,
+        use_enum_values=True,
     )
-    status: Status = Field(default=Status.active, description="Lifecycle status")
-    url: HttpUrl = Field(..., description="Canonical public URL to the organization")
-    contact_email: EmailStr = Field(..., description="Contact email address")
-    image_url: Optional[HttpUrl] = Field(
-        None, description="URL to the organization's logo/image"
-    )
+    
+    title: NonEmptyStr | None = None
+    description: NonEmptyStr | None = None
+    status: Status | None = None
+    url: HttpUrl | None = None
+    contact_email: EmailStr | None = None
+    image_url: Optional[HttpUrl] = None

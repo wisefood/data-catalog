@@ -85,16 +85,16 @@ class Organization(Entity):
         except Exception as e:
             raise DataError(f"Invalid organization update spec: {e}")
 
-        # Check if org exists
-        self.validate_existence("urn:organization:"+ urn)
+        # Check if org exists, URN is normalized here
+        self.validate_existence(urn)
  
         # Convert to dict and update in Elasticsearch
-        org_dict = org_data.model_dump(mode="json")
+        org_dict = org_data.model_dump(mode="json", exclude_unset=True, exclude_none=True)
         org_dict = self.upsert_system_fields(org_dict, update=True)
         org_dict["urn"] = urn  # Ensure URN is included
 
         try:
-            ELASTIC_CLIENT.index_entity(
+            ELASTIC_CLIENT.update_entity(
                 index_name=self.collection_name, document=org_dict
             )
         except Exception as e:

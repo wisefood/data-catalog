@@ -11,6 +11,9 @@ from es_schema import (
 )
 from main import config
 from schemas import SearchSchema
+import logging
+
+logger = logging.getLogger(__name__)
 
 class ElasticsearchClientSingleton:
     """Singleton class that holds a pool of Elasticsearch clients."""
@@ -137,10 +140,17 @@ class ElasticsearchClientSingleton:
         client.delete(index=index_name, id=urn, refresh="wait_for")
 
     def update_entity(self, index_name: str, document: dict):
+        # Avoid updating if only system fields are present
+        if set(document.keys()) == {"updated_at", "urn"}:
+            return
         client = self.get_client()
-        client.update(
-            index=index_name, id=document["urn"], doc=document, refresh="wait_for"
-        )
+        entity = self.get_entity(index_name, document["urn"])
+
+        if entity:
+            merged = {**entity, **document}
+            client.update(
+                index=index_name, id=entity["urn"], doc=merged, refresh="wait_for"
+            )
 
     def search_entities(self, index_name: str, qspec: SearchSchema):
         client = self.get_client()

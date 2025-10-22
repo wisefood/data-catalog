@@ -1,4 +1,3 @@
-
 # -----------------------------------
 #
 #  Dietary Guide Entity
@@ -24,6 +23,7 @@ from entity import Entity
 from entities.artifacts import ARTIFACT
 
 logger = logging.getLogger(__name__)
+
 
 class Guide(Entity):
     def __init__(self):
@@ -95,21 +95,19 @@ class Guide(Entity):
             raise InternalError(f"Failed to create guide: {e}")
 
     def patch(self, urn, spec):
+        """Partially update an existing guide."""
         try:
             guide_data = self.update_schema.model_validate(spec)
         except Exception as e:
             raise DataError(f"Invalid data for updating guide: {e}")
 
         # Check if guide exists
-        try:
-            existing = self.get(urn=urn)
-            if existing is None:
-                raise NotFoundError(f"Guide with URN {urn} not found.")
-        except NotFoundError:
-            raise NotFoundError(f"Guide with URN {urn} not found.")
+        self.validate_existence(urn)
 
         # Convert to dict and update in Elasticsearch
-        guide_dict = guide_data.model_dump(mode="json", exclude_unset=True)
+        guide_dict = guide_data.model_dump(
+            mode="json", exclude_unset=True, exclude_none=True
+        )
         guide_dict = self.upsert_system_fields(guide_dict, update=True)
         guide_dict["urn"] = urn
         try:

@@ -41,7 +41,7 @@ class Organization(Entity):
             raise NotFoundError(f"Organization with URN {urn} not found.")
         return entity
 
-    def create(self, spec: OrganizationCreationSchema, creator = None) -> Dict[str, Any]:
+    def create(self, spec: OrganizationCreationSchema, creator=None) -> Dict[str, Any]:
         """Create a new organization."""
         try:
             org_data = self.creation_schema.model_validate(spec)
@@ -49,7 +49,7 @@ class Organization(Entity):
             raise DataError(f"Invalid organization creation spec: {e}")
 
         try:
-            self.validate_existence("urn:organization:"+ org_data.urn)
+            self.validate_existence("urn:organization:" + org_data.urn)
 
             raise ConflictError(f"Organization with URN {org_data.urn} already exists.")
         except NotFoundError:
@@ -65,19 +65,22 @@ class Organization(Entity):
         except Exception as e:
             raise InternalError(f"Failed to create organization: {e}")
 
-    def list(self, limit: Optional[int] = None, offset: Optional[int] = None) -> List[str]:
+    def list(
+        self, limit: Optional[int] = None, offset: Optional[int] = None
+    ) -> List[str]:
         """List organizations with pagination."""
         return ELASTIC_CLIENT.list_entities(
             index_name=self.collection_name, size=limit or 100, offset=offset or 0
         )
-    
 
-    def fetch(self, limit: Optional[int] = None, offset: Optional[int] = None) -> List[Dict[str, Any]]:
+    def fetch(
+        self, limit: Optional[int] = None, offset: Optional[int] = None
+    ) -> List[Dict[str, Any]]:
         """Fetch organizations with detailed information and pagination."""
         return ELASTIC_CLIENT.fetch_entities(
             index_name=self.collection_name, limit=limit or 100, offset=offset or 0
         )
-    
+
     def patch(self, urn: str, spec: OrganizationUpdateSchema) -> Dict[str, Any]:
         """Partially update an existing organization."""
         try:
@@ -87,9 +90,11 @@ class Organization(Entity):
 
         # Check if org exists, URN is normalized here
         self.validate_existence(urn)
- 
+
         # Convert to dict and update in Elasticsearch
-        org_dict = org_data.model_dump(mode="json", exclude_unset=True, exclude_none=True)
+        org_dict = org_data.model_dump(
+            mode="json", exclude_unset=True, exclude_none=True
+        )
         org_dict = self.upsert_system_fields(org_dict, update=True)
         org_dict["urn"] = urn  # Ensure URN is included
 
@@ -99,20 +104,20 @@ class Organization(Entity):
             )
         except Exception as e:
             raise InternalError(f"Failed to update organization: {e}")
-        
+
     def search(self, query: Dict[str, Any]):
         """Search for organizations based on query parameters."""
         try:
             qspec = SearchSchema.model_validate(query).model_dump(mode="json")
         except Exception as e:
             raise DataError(f"Invalid search query: {e}")
-        
+
         return ELASTIC_CLIENT.search_entities(
             index_name=self.collection_name, qspec=qspec
         )
-    
+
     def delete(self):
         raise NotImplementedError("Organization deletion is not supported.")
-    
+
 
 ORGANIZATION = Organization()

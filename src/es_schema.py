@@ -93,8 +93,7 @@ def guide_index(dim: int):
                 "created_at": {"type": "date"},
                 "updated_at": {"type": "date"},
                 "publication_date": {"type": "date"},
-                # TODO: Add publishing organization
-                # User-provided metadata
+                "organization_urn": {"type": "keyword"},
                 "title": {"type": "text", "fields": {"keyword": {"type": "keyword"}}},
                 "description": {"type": "text"},
                 "tags": {"type": "keyword"},
@@ -128,35 +127,49 @@ def guide_index(dim: int):
         }
     }
 
-# TODO: Delete in future versions
-# Validate if should exist or not
-def policy_index(dim: int):
+def article_index(dim: int):
     return {
         "mappings": {
             "properties": {
                 "urn": {"type": "keyword"},
+                "id": {"type": "keyword"},
                 "title": {"type": "text"},
-                "content": {"type": "text"},
-                "authority": {"type": "keyword"},
-                "effective_date": {"type": "date"},
+                "description": {"type": "text"},
                 "tags": {"type": "keyword"},
-            }
-        }
-    }
-
-# TODO: Rename to article_index
-def paper_index(dim: int):
-    return {
-        "mappings": {
-            "properties": {
-                "urn": {"type": "keyword"},
-                "title": {"type": "text"},
+                "status": {"type": "keyword"},
+                "creator": {"type": "keyword"},
+                "created_at": {"type": "date"},
+                "updated_at": {"type": "date"},
+                "url": {"type": "keyword"},
+                "license": {"type": "keyword"},
+                "region": {"type": "keyword"},
+                "language": {"type": "keyword"},
+                "organization_urn": {"type": "keyword"},
+                "external_id": {"type": "keyword"},
                 "abstract": {"type": "text"},
+                "category": {"type": "keyword"},
+                "type": {"type": "keyword"},
                 "authors": {"type": "keyword"},
-                "publication_date": {"type": "date"},
+                "publication_year": {"type": "date"},
+                "organization_urn": {"type": "keyword"},
                 "content": {"type": "text"},
-                "journal": {"type": "keyword"},
-                "tags": {"type": "keyword"},
+                "venue": {"type": "keyword"},
+                # Nested artifacts
+                "artifacts": {
+                    "type": "nested",
+                    "properties": {
+                        "urn": {"type": "keyword"},
+                        "id": {"type": "keyword"},
+                        "title": {"type": "text"},
+                        "description": {"type": "text"},
+                        "file_url": {"type": "keyword"},
+                        "file_type": {"type": "keyword"},
+                        "file_size": {"type": "long"},
+                        "created_at": {"type": "date"},
+                        "updated_at": {"type": "date"},
+                        "type": {"type": "keyword"},
+                    },
+                },
             }
         }
     }

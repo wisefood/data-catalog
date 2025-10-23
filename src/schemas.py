@@ -100,8 +100,8 @@ class BaseSchema(BaseModel):
     )
     id: UUID = Field(..., description="Internal UUID")
     title: NonEmptyStr = Field(..., description="Human-readable title")
-    description: NonEmptyStr = Field(
-        ..., description="Summary/abstract of the resource (<= 2000 chars)"
+    description: Optional[NonEmptyStr] = Field(
+        None, description="Summary/abstract of the resource (<= 2000 chars)"
     )
     tags: Annotated[List[NonEmptyStr], Field(min_length=0, max_length=25)] = Field(
         default_factory=list, description="Topic tags"
@@ -110,8 +110,8 @@ class BaseSchema(BaseModel):
     creator: Optional[str] = Field(None, description="Contact email for the creator/owner")
     created_at: datetime = Field(..., description="Creation timestamp (UTC)")
     updated_at: datetime = Field(..., description="Last-modified timestamp (UTC)")
-    url: HttpUrl = Field(..., description="Canonical public URL to the resource")
-    license: LicenseId = Field(..., description="License identifier")
+    url: Optional[HttpUrl] = Field(None, description="Canonical public URL to the resource")
+    license: Optional[LicenseId] = Field(None, description="License identifier")
     language: Union[Iso639_1, None] = Field(
         default=None, description="Language code (ISO 639-1), e.g., 'en'"
     )
@@ -202,29 +202,16 @@ class GuideSchema(BaseSchema):
     region: Optional[Iso3166_1a2] = Field(
         None, description="Intended region (ISO 3166-1 alpha-2)"
     )
+    organization_urn: Optional[UrnStr] = Field(
+        None, description="URN of the publishing organization"
+    )
     content: str
     topic: str | None = None
     audience: str | None = None
     artifacts: List[ArtifactSchema] = Field(default_factory=list)
-    publication_date: Optional[datetime] = Field(
-        None, description="Original publication date (UTC)"
+    publication_year: Optional[int] = Field(
+        None, description="Original publication year"
     )
-
-class RecipeCollectionSchema(BaseSchema):
-    type: Literal["recipe_collection"] = Field(
-        default="recipe_collection", description="Resource type discriminator", exclude=True
-    )
-    ingredients: list[dict]
-    instructions: str | None = None
-    nutrition: dict | None = None
-
-    def model_dump(self, **kwargs):
-        data = super().model_dump(**kwargs)
-        data['type'] = 'recipe_collection'
-        return data
-
-
-# ---- Creation and Update Schemas ----
 
 class GuideCreationSchema(BaseModel):
     """
@@ -253,6 +240,9 @@ class GuideCreationSchema(BaseModel):
     license: LicenseId = Field(..., description="License identifier")
     region: Optional[Iso3166_1a2] = Field(
         None, description="Intended region (ISO 3166-1 alpha-2)"
+    )
+    organization_urn: Optional[UrnStr] = Field(
+        None, description="URN of the publishing organization"
     )
     publication_date: Optional[datetime] = Field(
         None, description="Original publication date (UTC)"
@@ -296,6 +286,9 @@ class GuideUpdateSchema(BaseModel):
     audience: str | None = None
     language: Union[Iso639_1, None] = None
     artifacts: List[ArtifactSchema] | None = None
+    organization_urn: Optional[UrnStr] = Field(
+        None, description="URN of the publishing organization"
+    )
     publication_date: Optional[datetime] = None
     @field_validator("tags")
     @classmethod
@@ -304,6 +297,129 @@ class GuideUpdateSchema(BaseModel):
             raise ValueError("tags must be unique (case-insensitive)")
         return v
     
+
+class ArticleSchema(BaseSchema):
+    model_config = ConfigDict(
+        extra="forbid",
+        str_strip_whitespace=True,
+        use_enum_values=True,
+    )
+
+    type: Literal["article"] = Field(
+        default="article", description="Resource type discriminator", exclude=True
+    )
+    organization_urn: Optional[UrnStr] = Field(
+        None, description="URN of the publishing organization"
+    )
+    abstract : NonEmptyStr = Field(
+        ..., description="Abstract of the article (<= 2000 chars)"
+    )
+    category: Optional[NonEmptyStr] = Field(
+        None, description="Category of the article (e.g. nutrition, health)"
+    )
+    authors: Annotated[List[NonEmptyStr], Field(min_length=1, max_length=10)] = Field(
+        ..., description="List of authors"
+    )
+    publication_year: Optional[int] = Field(
+        None, description="Publication year of the article (UTC)"
+    )
+    external_id: Optional[NonEmptyStr] = Field(
+        None, description="External identifier (e.g., DOI, PubMed ID, Semantic Scholar ID)"
+    )
+    content: str = Field(..., description="Full text content of the article")
+    venue: Optional[NonEmptyStr] = Field(
+        None, description="Venue where the article was published"
+    )
+    artifacts: List[ArtifactSchema] = Field(default_factory=list)
+    
+    def model_dump(self, **kwargs):
+        data = super().model_dump(**kwargs)
+        data['type'] = 'article'
+        return data
+
+
+class ArticleCreationSchema(BaseModel):
+    """
+    Schema for creating a new article. System generates: id, creator, created_at, updated_at.
+    User provides URN as a slug (e.g., 'healthy_eating_article'),
+    system prepends 'urn:article:' internally.
+    """
+    model_config = ConfigDict(
+        extra="forbid",
+        str_strip_whitespace=True,
+        use_enum_values=True,
+    )
+
+    urn: SlugStr = Field(
+        ..., description="URN slug (e.g., 'healthy_eating_article')"
+    )
+    title: NonEmptyStr = Field(..., description="Human-readable title")
+    tags: Annotated[List[NonEmptyStr], Field(min_length=0, max_length=25)] = Field(
+        default_factory=list, description="Topic tags"
+    )
+    url: Optional[HttpUrl] = Field(None, description="Canonical public URL to the resource")
+    external_id: Optional[NonEmptyStr] = Field(
+        None, description="External identifier (e.g., DOI, PubMed ID, Semantic Scholar ID)"
+    )
+    license: Optional[LicenseId] = Field(None, description="License identifier")
+    organization_urn: Optional[UrnStr] = Field(
+        None, description="URN of the publishing organization"
+    )
+    description: Optional[NonEmptyStr] = Field(
+        None, description="Summary/abstract of the resource (<= 2000 chars)"
+    )
+    abstract : NonEmptyStr = Field(
+        ..., description="Abstract of the article (<= 2000 chars)"
+    )
+    category: Optional[NonEmptyStr] = Field(
+        None, description="Category of the article (e.g. nutrition, health)"
+    )
+    authors: Annotated[List[NonEmptyStr], Field(min_length=1, max_length=10)] = Field(
+        ..., description="List of authors"
+    )
+    publication_year: int = Field(
+        ..., description="Publication year of the article (UTC)"
+    )
+    content: str = Field(..., description="Full text content of the article")
+    venue: NonEmptyStr = Field(
+        ..., description="Venue where the article was published"
+    )
+
+class ArticleUpdateSchema(BaseModel):
+    """
+    Schema for updating an existing article. All fields optional.
+    System fields (id, urn, creator, created_at, updated_at) cannot be modified.
+    """
+    model_config = ConfigDict(
+        extra="forbid",
+        str_strip_whitespace=True,
+        use_enum_values=True,
+    )
+
+    title: NonEmptyStr | None = None
+    description: NonEmptyStr | None = None
+    tags: Annotated[List[NonEmptyStr], Field(min_length=0, max_length=25)] | None = None
+    external_id: Optional[NonEmptyStr] = None
+    url: HttpUrl | None = None
+    license: Optional[LicenseId] = None
+    abstract : NonEmptyStr | None = None
+    category: Optional[NonEmptyStr] = None
+    authors: Annotated[List[NonEmptyStr], Field(min_length=1, max_length=10)] | None = None
+    publication_year: Optional[datetime] = None
+    content: str | None = None
+    venue: Optional[NonEmptyStr] = None
+    organization_urn: Optional[UrnStr] = Field(
+        None, description="URN of the publishing organization"
+    )
+    @field_validator("tags")
+    @classmethod
+    def unique_tags(cls, v: List[str] | None) -> List[str] | None:
+        if v is not None and len(set(map(str.lower, v))) != len(v):
+            raise ValueError("tags must be unique (case-insensitive)")
+        return v
+
+
+
 class OrganizationSchema(BaseModel):
     urn: UrnStr = Field(
         ..., description="Stable URN identifier, e.g., 'urn:organizations:fao-org'"

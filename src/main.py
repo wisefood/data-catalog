@@ -78,13 +78,14 @@ api = FastAPI(
 install_error_handler(api)
 
 # import routers
-from routers import core, guides, artifacts, organizations
+from routers import core, guides, artifacts, organizations, articles
 
 
 api.include_router(artifacts.router)
 # api.include_router(recipes.router)
 api.include_router(guides.router)
 api.include_router(organizations.router)
+api.include_router(articles.router)
 # api.include_router(policies.router)
 api.include_router(artifacts.router)
 api.include_router(core.router)
@@ -96,4 +97,5 @@ if __name__ == "__main__":
         host=config.settings["HOST"],
         port=config.settings["PORT"],
         reload=config.settings["DEBUG"],
+        reload_dirs=["/app"]
     )

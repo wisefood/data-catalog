@@ -157,6 +157,9 @@ class Entity:
         elif entity_type == "artifact":
             if ELASTIC_CLIENT.get_entity(index_name="artifacts", urn=urn) is None:
                 raise NotFoundError(f"Artifact with URN {urn} not found.")
+        elif entity_type == "article":
+            if ELASTIC_CLIENT.get_entity(index_name="articles", urn=urn) is None:
+                raise NotFoundError(f"Article with URN {urn} not found.")
         elif entity_type == "organization":
             if ELASTIC_CLIENT.get_entity(index_name="organizations", urn=urn) is None:
                 raise NotFoundError(f"Organization with URN {urn} not found.")

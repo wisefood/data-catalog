@@ -2,9 +2,8 @@ import threading
 from elasticsearch import Elasticsearch
 from es_schema import (
     recipe_collection_index,
-    paper_index,
+    article_index,
     guide_index,
-    policy_index,
     organization_index,
     person_index,
     artifact_index,
@@ -48,17 +47,13 @@ class ElasticsearchClientSingleton:
             es.indices.create(
                 index="guides", body=guide_index(config.settings["ES_DIM"])
             )
-        if not es.indices.exists(index="policies"):
-            es.indices.create(
-                index="policies", body=policy_index(config.settings["ES_DIM"])
-            )
         if not es.indices.exists(index="artifacts"):
             es.indices.create(
                 index="artifacts", body=artifact_index(config.settings["ES_DIM"])
             )
-        if not es.indices.exists(index="papers"):
+        if not es.indices.exists(index="articles"):
             es.indices.create(
-                index="papers", body=paper_index(config.settings["ES_DIM"])
+                index="articles", body=article_index(config.settings["ES_DIM"])
             )
         if not es.indices.exists(index="organizations"):
             es.indices.create(

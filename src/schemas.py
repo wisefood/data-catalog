@@ -25,6 +25,7 @@ UrnStr = Annotated[
     ),
 ]
 NonEmptyStr = Annotated[str, StringConstraints(min_length=1, max_length=2000)]
+NonEmptyAbstract = Annotated[str, StringConstraints(min_length=1, max_length=15000)]
 SlugStr = Annotated[
     str,
     StringConstraints(
@@ -311,8 +312,8 @@ class ArticleSchema(BaseSchema):
     organization_urn: Optional[UrnStr] = Field(
         None, description="URN of the publishing organization"
     )
-    abstract : NonEmptyStr = Field(
-        ..., description="Abstract of the article (<= 2000 chars)"
+    abstract : NonEmptyAbstract = Field(
+        ..., description="Abstract of the article (<= 15000 chars)"
     )
     category: Optional[NonEmptyStr] = Field(
         None, description="Category of the article (e.g. nutrition, health)"
@@ -368,8 +369,8 @@ class ArticleCreationSchema(BaseModel):
     description: Optional[NonEmptyStr] = Field(
         None, description="Summary/abstract of the resource (<= 2000 chars)"
     )
-    abstract : NonEmptyStr = Field(
-        ..., description="Abstract of the article (<= 2000 chars)"
+    abstract : NonEmptyAbstract = Field(
+        ..., description="Abstract of the article (<= 15000 chars)"
     )
     category: Optional[NonEmptyStr] = Field(
         None, description="Category of the article (e.g. nutrition, health)"
@@ -402,7 +403,7 @@ class ArticleUpdateSchema(BaseModel):
     external_id: Optional[NonEmptyStr] = None
     url: HttpUrl | None = None
     license: Optional[LicenseId] = None
-    abstract : NonEmptyStr | None = None
+    abstract : NonEmptyAbstract | None = None
     category: Optional[NonEmptyStr] = None
     authors: Annotated[List[NonEmptyStr], Field(min_length=1, max_length=10)] | None = None
     publication_year: Optional[datetime] = None
